@@ -1,6 +1,6 @@
 #!/bin/sh
 
-ADDON_NAME=hue
+ADDON_NAME=velux
 CONFIG_DIR=/usr/local/etc/config
 ADDON_DIR=/usr/local/addons/${ADDON_NAME}
 RCD_DIR=${CONFIG_DIR}/rc.d
