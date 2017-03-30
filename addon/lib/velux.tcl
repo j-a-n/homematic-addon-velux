@@ -277,13 +277,13 @@ proc ::velux::delete_window {window_id} {
 	release_lock $lock_id_ini_file
 }
 
-proc ::velux::get_level {window_id obj} {
+proc ::velux::get_level_value {window_id obj} {
 	set lvl 0.0
 	catch { set lvl [ expr { [get_window_param $window_id "${obj}_level"] } ] }
 	return $lvl
 }
 
-proc ::velux::set_level {window_id obj lvl} {
+proc ::velux::set_level_value {window_id obj lvl} {
 	global env
 	set_window_param $window_id "${obj}_level" $lvl
 	if { [info exists ::env(CUXD_CHANNEL) ] } {
@@ -348,3 +348,125 @@ proc ::velux::send_command {window_id obj cmd} {
 	release_lock $lock_id_transmit
 }
 
+proc velux::window_close_event {window_id} {
+	variable ventilation_state
+	
+	set wpid [get_process_id $window_id "window"]
+	if {$wpid == 0} {
+		# No process running, closed externally (i.e. rainsensor)
+		# correcting position to ventilation_state
+		set current_level [get_level_value $window_id "window"]
+		#write_log 4 "$window_id $current_level $ventilation_state"
+		if {$current_level > $ventilation_state} {
+			write_log 3 "Window ${window_id} closed externally, setting level from ${current_level} to ${ventilation_state}"
+			set_level_value $window_id "window" $ventilation_state
+		} else {
+			write_log 3 "Window ${window_id} closed externally, not changing current level of ${current_level}"
+		}
+	} else {
+		write_log 4 "Window ${window_id} closed by window process ${wpid}"
+	}
+}
+
+proc velux::set_level {window_id obj target_level} {
+	variable ventilation_state
+	variable dryrun
+	
+	if {$target_level == 0 || $target_level == 1} {
+		set rpid [get_process_id $window_id $obj]
+		if { $rpid > 0 } {
+			# Another process running
+			write_log 1 "Another process running, target level $target_level => stop movement"
+			acquire_window $window_id $obj
+			send_command $window_id $obj "stop"
+			release_window $window_id $obj
+			set_level_value $window_id $obj [get_level_value $window_id $obj]
+			return
+		}
+	}
+	
+	array set window [get_window $window_id]
+	
+	acquire_window $window_id $obj
+	
+	set motion_seconds $window(${obj}_motion_seconds)
+	set current_level [get_level_value $window_id $obj]
+	set reed_state [get_reed_state $window_id]
+	if {$reed_state == 1 && $current_level > $ventilation_state && $dryrun == 0} {
+		write_log 2 "reed contact closed, correcting level to ventilation_state ${ventilation_state}"
+		set current_level $ventilation_state
+	}
+	set level_diff [expr {$target_level - $current_level}]
+	if {$target_level <= 0} {
+		# some extra movement to ensure end position
+		set level_diff [expr {$level_diff - 0.1}]
+	} elseif {$target_level >= 1} {
+		# some extra movement to ensure end position
+		set level_diff [expr {$level_diff + 0.1}]
+	}
+	
+	write_log 4 "reed_state=$reed_state, current_level=$current_level, target_level=$target_level, level_diff=$level_diff"
+	
+	set start_time 0
+	set ms_elapsed 0
+	set start_level 0
+	
+	if {$level_diff != 0.0} {
+		set start_level $current_level
+		set level_change 0
+		
+		if {$level_diff > 0.0} {
+			send_command $window_id $obj "up"
+		} elseif {$level_diff < 0.0} {
+			send_command $window_id $obj "down"
+		}
+		set start_time [clock clicks]
+		
+		while {[expr {abs($level_change)}] < [expr {abs($level_diff)}]} {
+			after 250
+			#set cmd_pid [get_cmd_pid $channel]
+			#if {$cmd_pid != $process_id} {
+			#	write_log 1 "other process started, aborting"
+			#	set aborted 1
+			#	break
+			#}
+			set now [clock clicks]
+			set ms_elapsed [expr {($now - $start_time)/1000}]
+			set level_change [expr {round($ms_elapsed / $motion_seconds) / 1000.0}]
+			if {$level_diff < 0.0} {
+				set level_change [expr {$level_change * -1}]
+			}
+			set new_level [expr {(round(($start_level + $level_change)*100.0))/100.0}]
+			if {$new_level < 0.0} {
+				set new_level 0.0
+			} elseif {$new_level > 1.0} {
+				set new_level 1.0
+			}
+			
+			if {$level_diff > 0.0 && $new_level > [expr {$ventilation_state + 0.3}]} {
+				set reed_state [get_reed_state $window_id]
+				if {$reed_state == 1 && $dryrun == 0} {
+					# reed contact closed, movement failed, correcting level to ventilation_state and aborting
+					write_log 3 "Reed contact closed, movement failed, correcting level to ventilation_state (${ventilation_state}) and aborting."
+					set current_level $ventilation_state
+					set target_level $ventilation_state
+					break
+				}
+			}
+			write_log 4 "start_time=${start_time}, now=${now}, ms_elapsed=${ms_elapsed}, level_diff=${level_diff}, level_change=${level_change}, current_level=${current_level}, new_level=${new_level}"
+			if {$new_level != $current_level} {
+				set current_level $new_level
+				set_level_value $window_id $obj $current_level
+			}
+		}
+	}
+	
+	send_command $window_id $obj "stop"
+	if {$target_level != -1} {
+		set movement_ms [expr {([clock clicks] - $start_time)/1000}]
+		write_log 3 "Movement completed (window=${window_id}, obj=${obj}, movement_ms=${movement_ms}\(${ms_elapsed}\), start_level=${start_level}, target_level=${target_level})"
+		set_level_value $window_id $obj $target_level
+	}
+	
+	release_window $window_id $obj
+}
