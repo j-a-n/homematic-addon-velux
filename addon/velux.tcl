@@ -89,413 +89,85 @@
 #
 # ******************************************************************************************************************************************
 
-load tclrega.so
-
-set LOGFILE "/usr/local/velux_ctrl/log.txt"
-set CUXD_DEV "CUX4000001"
-set SYS_VAR_CMD_PID "velux_cmd_pid"
-set SYS_VAR_MOTION_SEC "velux_motion_seconds"
-set SYS_VAR_LEVEL "velux_level"
-set SYS_VAR_UP_DEV "velux_up_device"
-set SYS_VAR_DOWN_DEV "velux_down_device"
-set SYS_VAR_REED_DEV "velux_reed_device"
-set VENTILATION_STATE 0.15
-set SHORT_PRESS_TIME 750
-set CMD_PAUSE_TIME 1000
-set LOCK_START_PORT 11100
-set LOCK_ID_LOG_FILE 1
-set LOCK_ID_SYS_VAR 2
-set LOCK_ID_TRANSMIT 3
-
-set LOGLEVEL 1
-set DRYRUN 0
-
-proc port_map {lock_id} {
-	global LOCK_START_PORT
-	return [expr { $LOCK_START_PORT + $lock_id }]
-}
-
-proc acquire_lock {lock_id} {
-	global LOCK_SOCKET
-	set res 0
-	set port [port_map "$lock_id"]
-	# 'socket already in use' error will be our lock detection mechanism
-	while {1 == 1} {
-		if { [catch {socket -server dummy_accept $port} sock] } {
-			#puts "Could not acquire lock"
-			set res 1
-			after 25
-		} else {
-			set LOCK_SOCKET("$lock_id") "$sock"
-			break
-		}
-	}
-	return $res
-}
-
-proc release_lock {lock_id} {
-	global LOCK_SOCKET
-	if { [catch {close $LOCK_SOCKET("$lock_id")} ERRORMSG] } {
-		puts "Error '$ERRORMSG' on closing socket for lock '$lock_id'"
-	}
-	unset LOCK_SOCKET("$lock_id")
-}
-
-proc write_log {lvl str} {
-	global LOGLEVEL
-	global LOCK_ID_LOG_FILE
-	if {$lvl <= $LOGLEVEL} {
-		acquire_lock $LOCK_ID_LOG_FILE
-		global LOGFILE
-		set fd [open $LOGFILE "a"]
-		set date [clock seconds]
-		set date [clock format $date -format {%Y-%m-%d %T}]
-		set process_id [pid]
-		puts $fd "\[$lvl\] \[$date\] \[$process_id\] $str"
-		close $fd
-		puts "\[$lvl\] \[$date\] \[$process_id\] $str"
-		release_lock $LOCK_ID_LOG_FILE
-	}
-}
+source /usr/local/addons/velux/lib/velux.tcl
 
 proc log_environment {} {
 	global env
-	write_log 3 "=== Environment ====================="
+	velux::write_log 4 "=== Environment ====================="
 	foreach key [array names env] {
-		write_log 3 "$key=$env($key)"
+		velux::write_log 4 "${key}=$env($key)"
 	}
-	write_log 3 "====================================="
+	velux::write_log 4 "====================================="
 }
 
 proc log_arguments {} {
 	global argv
-	write_log 3 "=== Arguments ======================="
+	velux::write_log 4 "=== Arguments ======================="
 	foreach arg $argv {
-		write_log 3 "$arg"
+		velux::write_log 4 "${arg}"
 	}
-	write_log 3 "====================================="
+	velux::write_log 4 "====================================="
 }
 
-proc create_sys_var {var} {
-	write_log 1 "create system variable \"$var\""
-	set s "
-	string svName = \"$var\";
-	object  svObj = dom.GetObject(svName);
-	if (!svObj) {
-		object svObjects = dom.GetObject(ID_SYSTEM_VARIABLES);
-		svObj = dom.CreateObject(OT_VARDP);
-		svObjects.Add(svObj.ID());
-		svObj.Name(svName);
-		svObj.ValueType(ivtString);
-		svObj.ValueSubType(istChar8859);
-		
-		svObj.DPInfo(\"\");
-		svObj.ValueUnit(\"\");
-		svObj.State(\"\");
-		svObj.Internal(false);
-		svObj.Visible(true);
-		dom.RTUpdate(false);
-	}
-	"
-	rega_script $s
+proc usage {} {
+	global argv0
+	puts stderr ""
+	puts stderr "usage: ${argv0} <window-id> <command> \[parameter\]..."
+	puts stderr ""
+	puts stderr "possible commands:"
+	puts stderr "  set_window \[level\]   set window to level"
+	puts stderr "  set_shutter \[level\]  set shutter to level"
+	puts stderr "  window_close_event     window close event (reed contact)"
+	puts stderr ""
 }
 
-proc get_sys_var {var channel} {
-	global LOCK_ID_SYS_VAR
-	acquire_lock $LOCK_ID_SYS_VAR
-	set idx [expr {$channel - 1}]
-	array set ret [rega_script "var val1 = dom.GetObject(\"$var\").State();" ]
-	set val $ret(val1)
-	write_log 3 "value of system variable \"$var\": $val"
-	if {$val == "null"} {
-		create_sys_var $var
-	}
-	set val [lindex [split $val ";"] $idx]
-	write_log 3 "system variable \"$var\" value of channel $channel: $val"
-	release_lock $LOCK_ID_SYS_VAR
-	return $val
-}
-
-proc set_sys_var {var channel val} {
-	global LOCK_ID_SYS_VAR
-	acquire_lock $LOCK_ID_SYS_VAR
-	set idx [expr {$channel - 1}]
-	array set ret [rega_script "var val1 = dom.GetObject(\"$var\").State();" ]
-	set vals [split $ret(val1) ";"]
-	while {[llength $vals] < $channel} {
-		lappend vals ""
-	}
-	set vals [lreplace $vals $idx $idx $val]
-	set val [join $vals ";"]
-	write_log 3 "setting system variable \"$var\" to value: $val"
-	rega_script "dom.GetObject(\"$var\").State(\"$val\");"
-	release_lock $LOCK_ID_SYS_VAR
-}
-
-proc acquire_channel {channel} {
-	set bchannel [expr {$channel + 1}]
-	if {[expr {$channel % 2}] == 0} {
-		set bchannel [expr {$channel - 1}]
-	}
-	set ll 1
-	while {[get_cmd_pid $bchannel] != 0} {
-		write_log $ll "waiting for channel $bchannel to clear"
-		set ll 3
-		after 500
-	}
-	write_log 2 "channel $channel acquired"
-}
-
-proc get_process_age {process_id} {
-	set status [catch {exec sh -c "echo \$((\$(cat /proc/uptime | cut -d'.' -f1) - \$(cat /proc/$process_id/stat | cut -d' ' -f22)/100))"} result]
-	set seconds 0
-	if {$status == 0} {
-		set seconds [expr $result]
-	}
-	write_log 1 "process age of pid $process_id: $seconds second(s)"
-	return seconds
-}
-
-proc set_level {channel val} {
-	global SYS_VAR_LEVEL
-	global CUXD_DEV
-	set_sys_var $SYS_VAR_LEVEL $channel $val
-	write_log 2 "setting device \"CUxD.$CUXD_DEV:$channel.SET_STATE\" to state: $val"
-	rega_script "dom.GetObject(\"CUxD.$CUXD_DEV:$channel.SET_STATE\").State(\"$val\");"
-}
-
-proc get_level {channel} {
-	global SYS_VAR_LEVEL
-	set val [get_sys_var $SYS_VAR_LEVEL $channel]
-	if [catch { set val [expr $val] }] {
-		set val 0
-	}
-	return $val
-}
-
-proc get_cmd_pid {channel} {
-	global SYS_VAR_CMD_PID
-	set val [get_sys_var $SYS_VAR_CMD_PID $channel]
-	if [catch { set val [expr $val] }] {
-		set val 0
-	}
-	return $val
-}
-
-proc set_cmd_pid {channel val} {
-	global SYS_VAR_CMD_PID
-	set_sys_var $SYS_VAR_CMD_PID $channel $val
-}
-
-proc get_motion_seconds {channel} {
-	global SYS_VAR_MOTION_SEC
-	set val [get_sys_var $SYS_VAR_MOTION_SEC $channel]
-	if [catch { set val [expr $val] }] {
-		set val 0
-	}
-	return $val
-}
-
-proc set_motion_seconds {channel val} {
-	global SYS_VAR_MOTION_SEC
-	set_sys_var $SYS_VAR_MOTION_SEC $channel $val
-}
-
-proc get_down_device {channel} {
-	global SYS_VAR_DOWN_DEV
-	set val [get_sys_var $SYS_VAR_DOWN_DEV $channel]
-	return $val
-}
-
-proc set_down_device {channel val} {
-	global SYS_VAR_DOWN_DEV
-	set_sys_var $SYS_VAR_DOWN_DEV $channel $val
-}
-
-proc get_up_device {channel} {
-	global SYS_VAR_UP_DEV
-	set val [get_sys_var $SYS_VAR_UP_DEV $channel]
-	return $val
-}
-
-proc set_up_device {channel val} {
-	global SYS_VAR_UP_DEV
-	set_sys_var $SYS_VAR_UP_DEV $channel $val
-}
-
-proc set_device_state {device val} {
-	global DRYRUN
-	if {$device == ""} {
-		return -1
-	}
-	if {$DRYRUN} {
-		write_log 1 "would set device \"$device\" to state: $val (DRYRUN)"
-	} else {
-		write_log 1 "setting device \"$device\" to state: $val"
-		rega_script "dom.GetObject(\"$device\").State($val);"
-	}
-	return 0
-}
-
-proc device_cmd {channel cmd} {
-	global LOCK_ID_TRANSMIT
-	global SHORT_PRESS_TIME
-	global CMD_PAUSE_TIME
+proc process_window_close_event {window_id} {
+	variable velux::ventilation_state
 	
-	set down_device [get_down_device $channel]
-	if {$down_device == ""} {
-		# down_device not configure, set default
-		set_down_device $channel ""
-		return -1
-	}
-	set up_device [get_up_device $channel]
-	if {$up_device == ""} {
-		# up_device not configure, set default
-		set_up_device $channel ""
-		return -1
-	}
-	set up 1
-	set down 1
-	if {$cmd == "up"} { set down 0 }
-	if {$cmd == "down"} { set up 0 }
-	acquire_lock $LOCK_ID_TRANSMIT
-	set_device_state $up_device $up
-	set_device_state $down_device $down
-	after $SHORT_PRESS_TIME
-	set_device_state $up_device 0
-	set_device_state $down_device 0
-	after $CMD_PAUSE_TIME
-	release_lock $LOCK_ID_TRANSMIT
-}
-
-proc device_cmd_up {channel} {
-	device_cmd $channel "up"
-}
-
-proc device_cmd_down {channel} {
-	device_cmd $channel "down"
-}
-
-proc device_cmd_stop {channel} {
-	device_cmd $channel "stop"
-}
-
-
-proc get_reed_device {channel} {
-	global SYS_VAR_REED_DEV
-	set val [get_sys_var $SYS_VAR_REED_DEV $channel]
-	return $val
-}
-
-proc set_reed_device {channel val} {
-	global SYS_VAR_REED_DEV
-	set_sys_var $SYS_VAR_REED_DEV $channel $val
-}
-
-proc get_reed_state {channel} {
-	set device [get_reed_device $channel]
-	if {$device == ""} {
-		return -1
-	}
-	array set ret [rega_script "var val1 = dom.GetObject(\"$device\").State();" ]
-	set val $ret(val1)
-	write_log 2 "channel $channel reed device $device state: $val"
-	if {$val == "false"} {
-		return 1
-	}
-	if {$val == "true"} {
-		return 0
-	}
-	return -1
-}
-
-log_environment
-log_arguments
-
-set process_id [pid]
-set aborted 0
-set target_level -1
-set cmd [string tolower [lindex $argv 0]]
-if {$cmd == "short" || $cmd == "long" || $cmd == "set"} {
-	set cmd "set-level"
-}
-set channel [lindex $argv 1]
-if { $channel == "" && [info exists ::env(CUXD_CHANNEL) ] } {
-	set channel [lindex [split $env(CUXD_CHANNEL) ":"] 1]
-}
-if {$cmd == "set-level"} {
-	set target_level [lindex $argv 2]
-	if { $target_level == "" } {
-		if { [info exists ::env(CUXD_VALUE) ] } {
-			set target_level [expr {$env(CUXD_VALUE) / 1000.0}]
-		}
-	} else {
-		set target_level [expr {$target_level / 100.0}]
-	}
-	write_log 1 "set-level of channel $channel to $target_level"
-} elseif {$cmd == "stop"} {
-	write_log 1 "stop of channel $channel"
-} elseif {$cmd == "close-event"} {
-	write_log 1 "close-event of channel $channel"
-} else {
-	puts "Invalid command \"$cmd\", possible commands are: \"stop\", \"set-level\" and \"close-event\""
-	exit 1
-}
-
-acquire_channel $channel
-
-if {$cmd == "close-event"} {
-	set cmd_pid [get_cmd_pid $channel]
-	if {$cmd_pid == 0} {
+	set wpid [velux::get_process_id $window_id "window"]
+	if {$wpid == 0} {
 		# No process running, closed externally (i.e. rainsensor)
-		# correcting position to VENTILATION_STATE
-		set current_level [get_level $channel]
-		write_log 1 "$channel $current_level $VENTILATION_STATE"
-		if {$current_level > $VENTILATION_STATE} {
-			write_log 2 "Channel $channel closed externally, setting level from $current_level to $VENTILATION_STATE"
-			set_level $channel $VENTILATION_STATE
+		# correcting position to ventilation_state
+		set current_level [get_level $window_id "window"]
+		#velux::write_log 4 "$window_id $current_level $ventilation_state"
+		if {$current_level > $ventilation_state} {
+			velux::write_log 3 "Window ${window_id} closed externally, setting level from ${current_level} to ${ventilation_state}"
+			velux::set_level $window_id "window" $ventilation_state
 		} else {
-			write_log 2 "Channel $channel closed externally, not changing current level of $current_level"
+			velux::write_log 3 "Window ${window_id} closed externally, not changing current level of ${current_level}"
 		}
 	} else {
-		write_log 3 "Channel $channel closed by velux_ctrl"
+		velux::write_log 4 "Window ${window_id} closed by window process ${wpid}"
 	}
-	exit 0
 }
 
-set motion_seconds [get_motion_seconds $channel]
-if {$motion_seconds == 0} {
-	# motion_seconds not configure, set default
-	set motion_seconds 30
-	set_motion_seconds $channel $motion_seconds
-}
-set reed_device [get_reed_device $channel]
-if {$reed_device == ""} {
-	# reed_device not configure, set default
-	set_reed_device $channel ""
-}
-
-set cmd_pid [get_cmd_pid $channel]
-set_cmd_pid $channel $process_id
-if { $cmd_pid != 0 } {
-	# Another process running
+proc process_set_level {window_id obj target_level} {
+	variable velux::ventilation_state
+	variable velux::dryrun
+	
 	if {$target_level == 0 || $target_level == 1} {
-		write_log 1 "another process running, target level $target_level => stop movement"
-		device_cmd_stop $channel
-		set_cmd_pid $channel 0
-		exit 0
+		set rpid [velux::get_process_id $window_id $obj]
+		if { $rpid > 0 } {
+			# Another process running
+			velux::write_log 1 "Another process running, target level $target_level => stop movement"
+			velux::acquire_window $window_id $obj
+			velux::send_command $window_id $obj "stop"
+			velux::release_window $window_id $obj
+			velux::set_level $window_id $obj [velux::get_level $window_id $obj]
+			return
+		}
 	}
-}
-
-set start_time 0
-set ms_elapsed 0
-set start_level 0
-if {$cmd == "set-level"} {
-	set current_level [get_level $channel]
-	set reed_state [get_reed_state $channel]
-	if {$reed_state == 1 && $current_level > $VENTILATION_STATE} {
-		# reed contact closed, correct level to VENTILATION_STATE
-		set current_level $VENTILATION_STATE
+	
+	array set window [velux::get_window $window_id]
+	
+	velux::acquire_window $window_id $obj
+	
+	set motion_seconds $window(${obj}_motion_seconds)
+	set current_level [velux::get_level $window_id $obj]
+	set reed_state [velux::get_reed_state $window_id]
+	if {$reed_state == 1 && $current_level > $ventilation_state && $dryrun == 0} {
+		velux::write_log 2 "reed contact closed, correcting level to ventilation_state ${ventilation_state}"
+		set current_level $ventilation_state
 	}
 	set level_diff [expr {$target_level - $current_level}]
 	if {$target_level <= 0} {
@@ -506,27 +178,31 @@ if {$cmd == "set-level"} {
 		set level_diff [expr {$level_diff + 0.1}]
 	}
 	
-	write_log 2 "reed_state=$reed_state, current_level=$current_level, target_level=$target_level, level_diff=$level_diff"
+	velux::write_log 4 "reed_state=$reed_state, current_level=$current_level, target_level=$target_level, level_diff=$level_diff"
+	
+	set start_time 0
+	set ms_elapsed 0
+	set start_level 0
 	
 	if {$level_diff != 0.0} {
 		set start_level $current_level
 		set level_change 0
 		
 		if {$level_diff > 0.0} {
-			device_cmd_up $channel
+			velux::send_command $window_id $obj "up"
 		} elseif {$level_diff < 0.0} {
-			device_cmd_down $channel
+			velux::send_command $window_id $obj "down"
 		}
 		set start_time [clock clicks]
 		
 		while {[expr {abs($level_change)}] < [expr {abs($level_diff)}]} {
 			after 250
-			set cmd_pid [get_cmd_pid $channel]
-			if {$cmd_pid != $process_id} {
-				write_log 1 "other process started, aborting"
-				set aborted 1
-				break
-			}
+			#set cmd_pid [get_cmd_pid $channel]
+			#if {$cmd_pid != $process_id} {
+			#	velux::write_log 1 "other process started, aborting"
+			#	set aborted 1
+			#	break
+			#}
 			set now [clock clicks]
 			set ms_elapsed [expr {($now - $start_time)/1000}]
 			set level_change [expr {round($ms_elapsed / $motion_seconds) / 1000.0}]
@@ -539,44 +215,75 @@ if {$cmd == "set-level"} {
 			} elseif {$new_level > 1.0} {
 				set new_level 1.0
 			}
-			if {$level_diff > 0.0 && $new_level > [expr {$VENTILATION_STATE + 0.3}]} {
-				set reed_state [get_reed_state $channel]
-				if {$reed_state == 1} {
-					# reed contact closed, movement failed, correcting level to VENTILATION_STATE and aborting
-					write_log 1 "reed contact closed, movement failed, correcting level to VENTILATION_STATE ($VENTILATION_STATE) and aborting"
-					set current_level $VENTILATION_STATE
-					set target_level $VENTILATION_STATE
+			
+			if {$level_diff > 0.0 && $new_level > [expr {$ventilation_state + 0.3}]} {
+				set reed_state [velux::get_reed_state $window_id]
+				if {$reed_state == 1 && $dryrun == 0} {
+					# reed contact closed, movement failed, correcting level to ventilation_state and aborting
+					velux::write_log 3 "Reed contact closed, movement failed, correcting level to ventilation_state (${ventilation_state}) and aborting."
+					set current_level $ventilation_state
+					set target_level $ventilation_state
 					break
 				}
 			}
-			write_log 3 "start_time=$start_time, now=$now, ms_elapsed=$ms_elapsed, level_diff=$level_diff, level_change=$level_change, current_level=$current_level, new_level=$new_level"
+			velux::write_log 4 "start_time=${start_time}, now=${now}, ms_elapsed=${ms_elapsed}, level_diff=${level_diff}, level_change=${level_change}, current_level=${current_level}, new_level=${new_level}"
 			if {$new_level != $current_level} {
 				set current_level $new_level
-				set_level $channel $current_level
+				velux::set_level $window_id $obj $current_level
 			}
 		}
 	}
-}
-
-if {$aborted == 0} {
-	device_cmd_stop $channel
+	
+	velux::send_command $window_id $obj "stop"
 	if {$target_level != -1} {
 		set movement_ms [expr {([clock clicks] - $start_time)/1000}]
-		write_log 1 "movement completed (channel=$channel, aborted=$aborted, movement_ms=$movement_ms\($ms_elapsed\), start_level=$start_level, target_level=$target_level)"
-		set_level $channel $target_level
+		velux::write_log 3 "Movement completed (window=${window_id}, obj=${obj}, movement_ms=${movement_ms}\(${ms_elapsed}\), start_level=${start_level}, target_level=${target_level})"
+		velux::set_level $window_id $obj $target_level
 	}
-	# Set cmd pid to zero (no cmd running)
-	set_cmd_pid $channel 0
+	
+	velux::release_window $window_id $obj
 }
 
-write_log 3 "exiting"
+proc main {} {
+	global argc
+	global argv
+	global env
+	
+	log_environment
+	log_arguments
+	
+	set window_id [string tolower [lindex $argv 0]]
+	set cmd [string tolower [lindex $argv 1]]
+	
+	if {$cmd == "set_window" || $cmd == "set_shutter"} {
+		set target_level 0.0
+		if {$argc >= 3} {
+			set target_level [expr {[lindex $argv 2] / 100.0}]
+		} elseif { [info exists ::env(CUXD_VALUE) ] } {
+			set target_level [expr {$env(CUXD_VALUE) / 1000.0}]
+		}
+		velux::write_log 4 "Window ${window_id}: ${cmd} to ${target_level}"
+		if {$cmd == "set_window"} {
+			process_set_level $window_id "window" $target_level
+		} elseif {$cmd == "set_shutter"} {
+			process_set_level $window_id "shutter" $target_level
+		}
+	} elseif {$cmd == "window_close_event"} {
+		velux::write_log 1 "Window ${window_id}: ${cmd}"
+		process_window_close_event $window_id
+	} else {
+		usage
+		exit 1
+	}
+	velux::write_log 4 "exiting"
+}
+
+if { [ catch {
+	main
+} err ] } {
+	velux::write_log 1 $err
+	puts stderr "ERROR: $err"
+	exit 1
+}
 exit 0
-
-
-
-
-
-
-
-
 
