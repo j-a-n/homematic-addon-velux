@@ -62,7 +62,7 @@ namespace eval velux {
 	variable ventilation_state 0.15
 	variable short_press_millis 750
 	variable command_pause_millis 1000
-	variable dryrun 0
+	variable dryrun 1
 }
 
 # error=1, warning=2, info=3, debug=4
@@ -282,6 +282,22 @@ proc ::velux::create_window {window_id name window_up_channel window_down_channe
 	release_lock $lock_id_ini_file
 }
 
+proc ::velux::get_window_ids {} {
+	variable ini_file
+	variable lock_id_ini_file
+	acquire_lock $lock_id_ini_file
+	set window_ids [list]
+	set ini [ini::open $ini_file r]
+	foreach section [ini::sections $ini] {
+		set idx [string first "window_" $section]
+		if {$idx == 0} {
+			lappend window_ids [string range $section 7 end]
+		}
+	}
+	release_lock $lock_id_ini_file
+	return $window_ids
+}
+
 proc ::velux::get_window {window_id} {
 	variable ini_file
 	variable lock_id_ini_file
@@ -312,7 +328,7 @@ proc ::velux::get_window_id_by_param {param val} {
 	set window_id ""
 	set ini [ini::open $ini_file r]
 	foreach section [ini::sections $ini] {
-		set idx [string first "window_${window_id}" $section]
+		set idx [string first "window_" $section]
 		if {$idx == 0} {
 			if {[::ini::value $ini $section $param] == $val} {
 				set window_id [string range $section 7 end]
@@ -335,6 +351,13 @@ proc ::velux::get_window_param {window_id param} {
 		}
 	}
 	return $window($param)
+}
+
+proc ::velux::shutter_configured {window_id} {
+	if { [velux::get_window_param $window_id "shutter_up_channel"] != ""} {
+		return 1
+	}
+	return 0
 }
 
 proc ::velux::set_window_param {window_id param value} {
@@ -465,7 +488,7 @@ proc velux::window_close_event {window_id_or_channel} {
 	}
 }
 
-proc velux::set_level {window_id obj target_level} {
+proc velux::set_level {window_id obj target_level {extra_movement 0.1}} {
 	variable ventilation_state
 	variable dryrun
 	
@@ -499,10 +522,10 @@ proc velux::set_level {window_id obj target_level} {
 	set level_diff [expr {$target_level - $current_level}]
 	if {$target_level <= 0} {
 		# some extra movement to ensure end position
-		set level_diff [expr {$level_diff - 0.1}]
+		set level_diff [expr {$level_diff - $extra_movement}]
 	} elseif {$target_level >= 1} {
 		# some extra movement to ensure end position
-		set level_diff [expr {$level_diff + 0.1}]
+		set level_diff [expr {$level_diff + $extra_movement}]
 	}
 	
 	write_log 4 "reed_state=$reed_state, current_level=$current_level, target_level=$target_level, level_diff=$level_diff"
@@ -570,3 +593,19 @@ proc velux::set_level {window_id obj target_level} {
 	
 	release_window $window_id $obj
 }
+
+proc velux::reset {{window_id ""}} {
+	set window_ids [list]
+	if {$window_id == ""} {
+		set window_ids [get_window_ids]
+	} else {
+		lappend window_ids $window_id
+	}
+	foreach window_id $window_ids {
+		set_level $window_id "window" 0 1.0
+		if { [shutter_configured $window_id] } {
+			set_level $window_id "shutter" 1.0 1.0
+		}
+	}
+}
+
