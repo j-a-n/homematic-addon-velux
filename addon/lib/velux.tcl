@@ -242,8 +242,8 @@ proc ::velux::get_config_json {} {
 		set idx [string first "window_" $section]
 		if {$idx == 0} {
 			set count [ expr { $count + 1} ]
-			set tv_id [string range $section 7 end]
-			append json "{\"id\":\"${tv_id}\","
+			set window_id [string range $section 7 end]
+			append json "{\"id\":\"${window_id}\","
 			foreach key [ini::keys $ini $section] {
 				set value [::ini::value $ini $section $key]
 				set value [json_string $value]
@@ -299,11 +299,41 @@ proc ::velux::get_window {window_id} {
 		}
 	}
 	release_lock $lock_id_ini_file
+	if {$window(id) == ""} {
+		error "Window ${window_id} not configured."
+	}
 	return [array get window]
+}
+
+proc ::velux::get_window_id_by_param {param val} {
+	variable ini_file
+	variable lock_id_ini_file
+	acquire_lock $lock_id_ini_file
+	set window_id ""
+	set ini [ini::open $ini_file r]
+	foreach section [ini::sections $ini] {
+		set idx [string first "window_${window_id}" $section]
+		if {$idx == 0} {
+			if {[::ini::value $ini $section $param] == $val} {
+				set window_id [string range $section 7 end]
+				break
+			}
+		}
+	}
+	release_lock $lock_id_ini_file
+	if {$window_id == ""} {
+		error "Window not found by ${param}=${val}."
+	}
+	return $window_id
 }
 
 proc ::velux::get_window_param {window_id param} {
 	array set window [get_window $window_id]
+	if { ![info exists window($param)] } {
+		if {$param == "window_level" || $param == "shutter_level"} {
+			return 0
+		}
+	}
 	return $window($param)
 }
 
@@ -313,9 +343,21 @@ proc ::velux::set_window_param {window_id param value} {
 	write_log 4 "Setting window ${window_id} parameter ${param} to ${value}"
 	acquire_lock $lock_id_ini_file
 	set ini [ini::open $ini_file r+]
-	ini::set $ini "window_${window_id}" $param $value
-	ini::commit $ini
+	set found 0
+	foreach section [ini::sections $ini] {
+		set idx [string first "window_${window_id}" $section]
+		if {$idx == 0} {
+			set found 1
+		}
+	}
+	if {$found} {
+		ini::set $ini "window_${window_id}" $param $value
+		ini::commit $ini
+	}
 	release_lock $lock_id_ini_file
+	if {!$found} {
+		error "Window ${window_id} not configured."
+	}
 }
 
 proc ::velux::delete_window {window_id} {
@@ -329,9 +371,7 @@ proc ::velux::delete_window {window_id} {
 }
 
 proc ::velux::get_level_value {window_id obj} {
-	set lvl 0.0
-	catch { set lvl [ expr { [get_window_param $window_id "${obj}_level"] } ] }
-	return $lvl
+	return [ expr { [get_window_param $window_id "${obj}_level"] } ]
 }
 
 proc ::velux::set_level_value {window_id obj lvl} {
@@ -399,8 +439,14 @@ proc ::velux::send_command {window_id obj cmd} {
 	release_lock $lock_id_transmit
 }
 
-proc velux::window_close_event {window_id} {
+proc velux::window_close_event {window_id_or_channel} {
 	variable ventilation_state
+	set window_id ""
+	if { [catch {expr {abs($window_id_or_channel)}}] } {
+		set window_id [get_window_id_by_param "window_reed_channel" $window_id_or_channel]
+	} else {
+		set window_id $window_id_or_channel
+	}
 	
 	set wpid [get_process_id $window_id "window"]
 	if {$wpid == 0} {

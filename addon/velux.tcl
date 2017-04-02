@@ -40,12 +40,12 @@ proc log_arguments {} {
 proc usage {} {
 	global argv0
 	puts stderr ""
-	puts stderr "usage: ${argv0} <window-id> <command> \[parameter\]..."
+	puts stderr "usage: ${argv0} <command> \[parameter\]..."
 	puts stderr ""
 	puts stderr "possible commands:"
-	puts stderr "  set_window \[level\]   set window to level"
-	puts stderr "  set_shutter \[level\]  set shutter to level"
-	puts stderr "  window_close_event     window close event (reed contact)"
+	puts stderr "  set_window <window_id> \[level\]                set window to level"
+	puts stderr "  set_shutter <window_id> \[level\]               set shutter to level"
+	puts stderr "  window_close_event <window_id|reed_channel>   window close event (reed contact)"
 	puts stderr ""
 }
 
@@ -57,10 +57,14 @@ proc main {} {
 	log_environment
 	log_arguments
 	
-	set window_id [string tolower [lindex $argv 0]]
-	set cmd [string tolower [lindex $argv 1]]
+	set cmd [string tolower [lindex $argv 0]]
 	
 	if {$cmd == "set_window" || $cmd == "set_shutter"} {
+		if {$argc < 2} {
+			usage
+			exit 1
+		}
+		set window_id [string tolower [lindex $argv 1]]
 		set target_level 0.0
 		if {$argc >= 3} {
 			set target_level [expr {[lindex $argv 2] / 100.0}]
@@ -74,8 +78,13 @@ proc main {} {
 			velux::set_level $window_id "shutter" $target_level
 		}
 	} elseif {$cmd == "window_close_event"} {
-		velux::write_log 1 "Window ${window_id}: ${cmd}"
-		velux::window_close_event $window_id
+		set window_id_or_channel [lindex $argv 1]
+		if {$window_id_or_channel == ""} {
+			usage
+			exit 1
+		}
+		velux::write_log 1 "Window ${window_id_or_channel}: ${cmd}"
+		velux::window_close_event $window_id_or_channel
 	} else {
 		usage
 		exit 1
