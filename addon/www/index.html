@@ -1,0 +1,407 @@
+<!DOCTYPE HTML>
+<!--
+HomeMatic addon to control velux windows and shutters
+
+Copyright (C) 2017  Jan Schneider <oss@janschneider.net>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+-->
+<html>
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js" integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8=" crossorigin="anonymous"></script>
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.2.7/semantic.min.css" integrity="sha256-wT6CFc7EKRuf7uyVfi+MQNHUzojuHN2pSw0YWFt2K5E=" crossorigin="anonymous" />
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.2.7/semantic.min.js" integrity="sha256-flVaeawsBV96vCHiLmXn03IRJym7+ZfcLVvUWONCas8=" crossorigin="anonymous"></script>
+	<style>
+	</style>
+	
+	<title>Velux Addon</title>
+	<script>
+		var config = {};
+		var in_out_channels = {};
+		var config_loaded = false;
+		var message_timer_id = null;
+		
+		$(document).ready(function() {
+			get_config();
+			get_in_out_channels();
+		});
+		
+		function display_message(type, html, millis) {
+			clear_message();
+			$('#message').html(html);
+			$('#message').attr('class', 'ui ' + type + ' message visible');
+			$('#message-edit-window').html(html);
+			$('#message-edit-window').attr('class', 'ui ' + type + ' message visible');
+			message_timer_id = setTimeout(clear_message, millis);
+		};
+		
+		function clear_message() {
+			if (message_timer_id != null) {
+				clearTimeout(message_timer_id);
+			}
+			message_timer_id = null;
+			$('#message').html('');
+			$('#message').attr('class', 'ui message hidden');
+			$('#message-edit-window').html('');
+			$('#message-edit-window').attr('class', 'ui message hidden');
+		}
+		
+		function rest(method, path, data, success_callback, error_callback) {
+			if (!error_callback) {
+				error_callback = function(xhr, ajaxOptions, thrownError) {
+					console.error(xhr);
+					err = thrownError;
+					try {
+						obj = JSON.parse(xhr.responseText);
+						if (obj.error != null) {
+							err = obj.error;
+						}
+					}
+					catch(e) {
+					}
+					display_message('error', 'An error occurred: ' + err, 60000);
+				}
+			}
+			$.ajax({
+				url: "rest.cgi?" + path,
+				type: method,
+				data: data,
+				context: document.body,
+				success: success_callback,
+				error: error_callback
+			});
+		}
+		
+		function get_window_id() {
+			if (!config_loaded) {
+				display_message('error', 'Config not loaded', 5000);
+				return;
+			}
+			id = 1;
+			config.windows.forEach(function(window) {
+				if (1 + parseInt(window.id) > id) {
+					id = 1 + parseInt(window.id);
+				}
+			});
+			return id;
+		}
+		
+		function update_view() {
+			$('#windows tbody').empty();
+			config.windows.forEach(function(window) {
+				//console.log(window);
+				var bedit = $('<button class="ui grey basic button">').attr('data-id', window.id).text('edit');
+				bedit.click(function() {
+					edit_config_window(this.getAttribute('data-id'));
+				});
+				var bdel = $('<button class="ui red basic button">').attr('data-id', window.id).text('delete');
+				bdel.click(function() {
+					$("#confirm-delete").modal({
+						onApprove: function() {
+							delete_config_window(this.getAttribute('data-id'));
+						}
+					}).modal('show').attr('data-id', window.id);
+				});
+				$("#windows tbody").append($('<tr>').append(
+					$('<td>').text(window.id),
+					$('<td>').text(window.name || ''),
+					$('<td class="center aligned">').append(bedit, bdel)
+				));
+			});
+		}
+		
+		function get_config() {
+			rest("GET", "/config", "", function(data) {
+				config = data;
+				config_loaded = true;
+				update_view();
+			});
+		}
+		function get_in_out_channels() {
+			rest("GET", "/get_in_out_channels", "", function(data) {
+				in_out_channels = data;
+				in_out_channels.in.sort();
+				in_out_channels.out.sort();
+			});
+		}
+		
+		function delete_config_window(id) {
+			var windows = [];
+			config.windows.forEach(function(window) {
+				if (window.id == id) {
+					rest("DELETE", "/config/window/" + window.id, config, function(data) {
+						console.log(data);
+						get_config();
+						display_message('success', 'Window successfully deleted', 5000);
+					});
+				}
+				else {
+					windows.push(window);
+				}
+			});
+			config.windows = windows;
+			update_view();
+		}
+		
+		function update_config_window(window) {
+			rest("PUT", "/config/window/" + window.id, JSON.stringify(window), function(data) {
+				get_config();
+				display_message('success', 'Window successfully updated', 5000);
+			});
+		}
+		
+		function edit_config_window(id) {
+			config.windows.forEach(function(window) {
+				if (window.id == id) {
+					var window_up_channel = $("select[name='window_up_channel']");
+					var window_down_channel = $("select[name='window_down_channel']");
+					var shutter_up_channel = $("select[name='shutter_up_channel']");
+					var shutter_down_channel = $("select[name='shutter_down_channel']");
+					window_up_channel.empty();
+					window_down_channel.empty();
+					shutter_up_channel.empty();
+					shutter_down_channel.empty();
+					in_out_channels.out.forEach(function(channel) {
+						$("<option/>").val(channel).text(channel).appendTo(window_up_channel);
+						$("<option/>").val(channel).text(channel).appendTo(window_down_channel);
+						$("<option/>").val(channel).text(channel).appendTo(shutter_up_channel);
+						$("<option/>").val(channel).text(channel).appendTo(shutter_down_channel);
+					});
+					
+					var window_reed_channel = $("select[name='window_reed_channel']");
+					window_reed_channel.empty();
+					in_out_channels.in.forEach(function(channel) {
+						$("<option/>").val(channel).text(channel).appendTo(window_reed_channel);
+					});
+					
+					var form = $('#form-edit-window');
+					form.form('clear');
+					form.form('set values', {
+						id: window.id,
+						name: window.name || '',
+						window_up_channel: window.window_up_channel || '',
+						window_down_channel: window.window_down_channel || '',
+						window_motion_seconds: window.window_motion_seconds || '',
+						window_reed_channel: window.window_reed_channel || '',
+						shutter_up_channel: window.shutter_up_channel || '',
+						shutter_down_channel: window.shutter_down_channel || '',
+						shutter_motion_seconds: window.shutter_motion_seconds || ''
+					});
+					form.find("input[name='id']").parent().css('display', 'block');
+					clear_message();
+					$('#modal-edit-window').modal('show');
+				}
+			});
+		}
+		
+		function add_window() {
+			var form = $('#form-edit-window');
+			form.form('clear');
+			form.find("input[name='id']").parent().css('display', 'none');
+			$('#modal-edit-window').modal('show');
+		}
+		
+		function api_request(window_id, method, path, data, success_callback) {
+			rest("POST", "/windows/" + window_id + '/request', JSON.stringify({"method": method, "path": path, "data": data}), function(data) {
+				//display_message('info', data, 5000);
+				if (success_callback) {
+					success_callback(data);
+				}
+			});
+		}
+		
+		$(document).ready(function() {
+			rest("GET", "/version", null, function(version) {
+				document.title = document.title + " " + version;
+			});
+			var form_config = {
+				on: 'blur',
+				fields: {
+					id: {
+					},
+					name: {
+						rules: [{
+							type: 'regExp[/^[A-Za-z0-9-\. ]+$/]',
+							prompt: 'Please enter a valid window name.'
+						}]
+					},
+					window_up_channel: {
+						rules: [{
+							type: 'empty',
+							prompt: 'Please select a channel for the window up button.'
+						}]
+					},
+					window_down_channel: {
+						rules: [{
+							type: 'empty',
+							prompt: 'Please select a channel for the window down button.'
+						}]
+					},
+					window_motion_seconds: {
+						rules: [{
+							type: 'integer[0..100]',
+							prompt: 'Please enter a valid integer for the window full motion time.'
+						}]
+					},
+					window_reed_channel: {
+						optional: true,
+						rules: [{
+							type: 'empty',
+							prompt: 'Please select a channel for the window reed switch.'
+						}]
+					},
+					shutter_up_channel: {
+						optional: true,
+						rules: [{
+							type: 'empty',
+							prompt: 'Please select a channel for the shutter up button.'
+						}]
+					},
+					shutter_down_channel: {
+						optional: true,
+						rules: [{
+							type: 'empty',
+							prompt: 'Please select a channel for the shutter down button.'
+						}]
+					},
+					shutter_motion_seconds: {
+						optional: true,
+						rules: [{
+							type: 'integer[0..100]',
+							prompt: 'Please enter a valid integer for the shutter full motion time.'
+						}]
+					}
+				},
+				onSuccess: function(event, fields) {
+					$(event.currentTarget).closest("div.modal").modal('hide');
+					var window = $(event.currentTarget).form('get values');
+					if (!window.id) {
+						window.id = get_window_id();
+					}
+					update_config_window(window);
+					event.preventDefault();
+				}
+			};
+			$('#form-edit-window').form(form_config);
+			$('#modal-edit-window').modal({
+				onHide: function() {
+					clear_message();
+				}
+			});
+		});
+	</script>
+</head>
+<body>
+	<div style="padding-top: 5vw" class="ui container">
+		<h1 class="ui header">Velux Window Configuration</h1>
+		<div id="message" class="ui message hidden">
+		</div>
+		<h2 class="ui dividing header">Configured Velux Windows</h2>
+		<table id="windows" class="ui celled stackable table">
+			<thead>
+				<tr>
+					<th>ID</th>
+					<th>Name</th>
+					<th class="center aligned">Action</th>
+				</tr>
+			</thead>
+			<tbody>
+			</tbody>
+		</table>
+		<div onclick="add_window();" class="ui blue basic button">
+		<i class="plus icon"></i>
+		Add Velux Window
+		</div>
+	</div>
+	
+	<div id="modal-edit-window" class="ui modal">
+		<i class="close icon"></i>
+		<div class="header">
+			Velux Window
+		</div>
+		<div class="content">
+			<div id="message-edit-window" class="ui message hidden">
+			</div>
+			<form id="form-edit-window" class="ui form">
+				<div class="disabled field">
+					<label>ID</label>
+					<input name="id" placeholder="ID" type="text">
+				</div>
+				<div class="field">
+					<label>Name</label>
+					<input name="name" placeholder="Name" type="text">
+				</div>
+				<div class="field">
+					<label>Window up button channel</label>
+					<select class="ui dropdown" name="window_up_channel">
+					</select>
+				</div>
+				<div class="field">
+					<label>Window down button channel</label>
+					<select class="ui dropdown" name="window_down_channel">
+					</select>
+				</div>
+				<div class="field">
+					<label>Window full motion time in seconds</label>
+					<input name="window_motion_seconds" placeholder="" type="text">
+				</div>
+				<div class="field">
+					<label>Window reed switch channel (optional)</label>
+					<select class="ui dropdown" name="window_reed_channel">
+					</select>
+				</div>
+				<div class="field">
+					<label>Shutter up button channel</label>
+					<select class="ui dropdown" name="shutter_up_channel">
+					</select>
+				</div>
+				<div class="field">
+					<label>Shutter down button channel</label>
+					<select class="ui dropdown" name="shutter_down_channel">
+					</select>
+				</div>
+				<div class="field">
+					<label>Shutter full motion time in seconds</label>
+					<input name="shutter_motion_seconds" placeholder="" type="text">
+				</div>
+				<div class="ui error message"></div>
+				<div class="ui button" onclick="$('#modal-edit-window').modal('hide');">Cancel</div>
+				<div id="submit-edit-window" class="ui primary submit button">Submit</div>
+			</form>
+		</div>
+	</div>
+	
+	<div class="ui dimmer modals page transition">
+		<div id="confirm-delete" class="ui small basic modal transition">
+			<div class="content">
+				<p>Do you really want to delete this Window?</p>
+			</div>
+			<div class="actions">
+				<div class="ui red cancel inverted button">
+					<i class="remove icon"></i>
+					No
+				</div>
+				<div class="ui green ok inverted button">
+					<i class="checkmark icon"></i>
+					Yes
+				</div>
+			</div>
+		</div>
+	</div>
+	
+</body>
+</html>

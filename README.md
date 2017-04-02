@@ -1,4 +1,4 @@
-# HomeMatic addon to control Velux windows and blinds
+# HomeMatic addon to control Velux windows and shutters
 Do not use this addon in the curren state!
 
 ## Prerequisites

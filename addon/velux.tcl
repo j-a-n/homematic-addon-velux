@@ -1,6 +1,6 @@
 #!/bin/tclsh
 
-#  HomeMatic addon to control Velux windows and blinds
+#  HomeMatic addon to control velux windows and shutters
 #
 #  Copyright (C) 2017  Jan Schneider <oss@janschneider.net>
 #
@@ -50,9 +50,9 @@
 # ******************************************************************************************************************************************
 #
 # dom.GetObject("velux_motion_seconds").Variable("45;30;45;30;45;30");
-# dom.GetObject("velux_up_device").Variable("FEN_DUSCHE_AUF;ROL_DUSCHE_AUF;FEN_BAD_AUF;ROL_BAD_AUF;FEN_SPITZBODEN_AUF;ROL_SPITZBODEN_AUF");
-# dom.GetObject("velux_down_device").Variable("FEN_DUSCHE_ZU;ROL_DUSCHE_ZU;FEN_BAD_ZU;ROL_BAD_ZU;FEN_SPITZBODEN_ZU;ROL_SPITZBODEN_ZU");
-# dom.GetObject("velux_reed_device").Variable("REED_FEN_DUSCHE;;REED_FEN_BAD;;REED_FEN_SPITZBODEN;");
+# dom.GetObject("velux_up_channel").Variable("FEN_DUSCHE_AUF;ROL_DUSCHE_AUF;FEN_BAD_AUF;ROL_BAD_AUF;FEN_SPITZBODEN_AUF;ROL_SPITZBODEN_AUF");
+# dom.GetObject("velux_down_channel").Variable("FEN_DUSCHE_ZU;ROL_DUSCHE_ZU;FEN_BAD_ZU;ROL_BAD_ZU;FEN_SPITZBODEN_ZU;ROL_SPITZBODEN_ZU");
+# dom.GetObject("velux_reed_channel").Variable("REED_FEN_DUSCHE;;REED_FEN_BAD;;REED_FEN_SPITZBODEN;");
 #
 # ******************************************************************************************************************************************
 #

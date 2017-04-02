@@ -1,6 +1,6 @@
 #!/bin/tclsh
 
-#  HomeMatic addon to control velux windows and blinds
+#  HomeMatic addon to control velux windows and shutters
 #
 #  Copyright (C) 2017  Jan Schneider <oss@janschneider.net>
 #
@@ -210,20 +210,107 @@ proc ::velux::release_window {window_id obj} {
 	}
 }
 
-proc ::velux::create_window {window_id name window_up_device window_down_device window_motion_seconds {window_reed_device ""} {shutter_up_device ""} {shutter_down_device ""} {shutter_motion_seconds 0}} {
+proc ::velux::get_in_out_channels_json {} {
+	set json "\{\"in\":\["
+	array set data [rega_script "
+		string deviceid;
+		foreach(deviceid, dom.GetObject(ID_DEVICES).EnumUsedIDs()) {
+			var device = dom.GetObject(deviceid);
+			string channelid;
+			foreach(channelid,device.Channels().EnumUsedIDs()) {
+				var channel = dom.GetObject(channelid);
+				if (((channel.ChnLabel() == 'INPUT_OUTPUT') || (channel.ChnLabel() == 'DIGITAL_INPUT') || (channel.ChnLabel() == 'DIGITAL_ANALOG_INPUT')) && ((channel.ChnDirection() == 0) || (channel.ChnDirection() == 1))) {
+					WriteLine(channel.Name());
+				}
+			}
+		}
+	"]
+	set count 0
+	foreach d [split [encoding convertfrom utf-8 $data(STDOUT)] "\n"] {
+		set d [string trim $d]
+		if {$d != ""} {
+			set count [ expr { $count + 1} ]
+			append json "\"${d}\","
+		}
+	}
+	if {$count > 0} {
+		set json [string range $json 0 end-1]
+	}
+	append json "\],\"out\":\["
+	
+	array set data [rega_script "
+		string deviceid;
+		foreach(deviceid, dom.GetObject(ID_DEVICES).EnumUsedIDs()) {
+			var device = dom.GetObject(deviceid);
+			string channelid;
+			foreach(channelid,device.Channels().EnumUsedIDs()) {
+				var channel = dom.GetObject(channelid);
+				if (((channel.ChnLabel() == 'INPUT_OUTPUT') || (channel.ChnLabel() == 'DIGITAL_OUTPUT') || (channel.ChnLabel() == 'DIGITAL_ANALOG_OUTPUT')) && ((channel.ChnDirection() == 0) || (channel.ChnDirection() == 2))) {
+					WriteLine(channel.Name());
+				}
+			}
+		}
+	"]
+	set count 0
+	foreach d [split [encoding convertfrom utf-8 $data(STDOUT)] "\n"] {
+		set d [string trim $d]
+		if {$d != ""} {
+			set count [ expr { $count + 1} ]
+			append json "\"${d}\","
+		}
+	}
+	if {$count > 0} {
+		set json [string range $json 0 end-1]
+	}
+	append json "\]\}"
+	
+	return $json
+}
+
+proc ::velux::get_config_json {} {
+	variable ini_file
+	variable lock_id_ini_file
+	acquire_lock $lock_id_ini_file
+	set ini [ini::open $ini_file r]
+	set json "\{\"windows\":\["
+	set count 0
+	foreach section [ini::sections $ini] {
+		set idx [string first "window_" $section]
+		if {$idx == 0} {
+			set count [ expr { $count + 1} ]
+			set tv_id [string range $section 7 end]
+			append json "{\"id\":\"${tv_id}\","
+			foreach key [ini::keys $ini $section] {
+				set value [::ini::value $ini $section $key]
+				set value [json_string $value]
+				append json "\"${key}\":\"${value}\","
+			}
+			set json [string range $json 0 end-1]
+			append json "},"
+		}
+	}
+	if {$count > 0} {
+		set json [string range $json 0 end-1]
+	}
+	append json "\]\}"
+	release_lock $lock_id_ini_file
+	return $json
+}
+
+proc ::velux::create_window {window_id name window_up_channel window_down_channel window_motion_seconds {window_reed_channel ""} {shutter_up_channel ""} {shutter_down_channel ""} {shutter_motion_seconds 0}} {
 	variable ini_file
 	variable lock_id_ini_file
 	acquire_lock $lock_id_ini_file
 	set ini [ini::open $ini_file r+]
 	ini::set $ini "window_${window_id}" "name" $name
-	ini::set $ini "window_${window_id}" "window_up_device" $window_up_device
-	ini::set $ini "window_${window_id}" "window_down_device" $window_down_device
+	ini::set $ini "window_${window_id}" "window_up_channel" $window_up_channel
+	ini::set $ini "window_${window_id}" "window_down_channel" $window_down_channel
 	ini::set $ini "window_${window_id}" "window_motion_seconds" $window_motion_seconds
-	ini::set $ini "window_${window_id}" "window_reed_device" $window_reed_device
+	ini::set $ini "window_${window_id}" "window_reed_channel" $window_reed_channel
 	ini::set $ini "window_${window_id}" "window_level" "0.0"
 	ini::set $ini "window_${window_id}" "window_pid" "0"
-	ini::set $ini "window_${window_id}" "shutter_up_device" $shutter_up_device
-	ini::set $ini "window_${window_id}" "shutter_down_device" $shutter_down_device
+	ini::set $ini "window_${window_id}" "shutter_up_channel" $shutter_up_channel
+	ini::set $ini "window_${window_id}" "shutter_down_channel" $shutter_down_channel
 	ini::set $ini "window_${window_id}" "shutter_motion_seconds" $shutter_motion_seconds
 	ini::set $ini "window_${window_id}" "shutter_level" "0.0"
 	ini::set $ini "window_${window_id}" "shutter_pid" "0"
@@ -287,32 +374,32 @@ proc ::velux::set_level_value {window_id obj lvl} {
 	global env
 	set_window_param $window_id "${obj}_level" $lvl
 	if { [info exists ::env(CUXD_CHANNEL) ] } {
-		write_log 4 "Setting device \"CUxD.$env(CUXD_CHANNEL)\" to state: $lvl"
+		write_log 4 "Setting channel \"CUxD.$env(CUXD_CHANNEL)\" to state: $lvl"
 		rega_script "dom.GetObject(\"CUxD.$env(CUXD_CHANNEL).SET_STATE\").State(\"$lvl\");"
 	}
 	
 }
 
-proc ::velux::set_object_state {device val} {
+proc ::velux::set_object_state {channel val} {
 	variable dryrun
-	if {$device == ""} {
+	if {$channel == ""} {
 		error "Device not set"
 	}
 	if {$dryrun} {
-		write_log 3 "Would set device \"$device\" to state: $val (dryrun)"
+		write_log 3 "Would set channel \"$channel\" to state: $val (dryrun)"
 	} else {
-		write_log 3 "Setting device \"$device\" to state: $val"
-		rega_script "dom.GetObject(\"$device\").State($val);"
+		write_log 3 "Setting channel \"$channel\" to state: $val"
+		rega_script "dom.GetObject(\"$channel\").State($val);"
 	}
 	return 0
 }
 
 proc ::velux::get_reed_state {window_id} {
-	set device [get_window_param $window_id "window_reed_device"]
-	if {$device != ""} {
-		array set ret [rega_script "var val1 = dom.GetObject(\"${device}\").State();" ]
+	set channel [get_window_param $window_id "window_reed_channel"]
+	if {$channel != ""} {
+		array set ret [rega_script "var val1 = dom.GetObject(\"${channel}\").State();" ]
 		set val $ret(val1)
-		write_log 4 "Window ${window_id} reed device ${device} state: ${val}"
+		write_log 4 "Window ${window_id} reed channel ${channel} state: ${val}"
 		if {$val == "false"} {
 			return 1
 		} elseif {$val == "true"} {
@@ -331,19 +418,19 @@ proc ::velux::send_command {window_id obj cmd} {
 	velux::write_log 4 "send_command: ${window_id} ${obj} ${cmd}"
 	
 	array set window [get_window $window_id]
-	set up_device $window(${obj}_up_device)
-	set down_device $window(${obj}_down_device)
+	set up_channel $window(${obj}_up_channel)
+	set down_channel $window(${obj}_down_channel)
 	
 	set up 1
 	set down 1
 	if {$cmd == "up"} { set down 0 }
 	if {$cmd == "down"} { set up 0 }
 	acquire_lock $lock_id_transmit
-	set_object_state $up_device $up
-	set_object_state $down_device $down
+	set_object_state $up_channel $up
+	set_object_state $down_channel $down
 	after $short_press_millis
-	set_object_state $up_device 0
-	set_object_state $down_device 0
+	set_object_state $up_channel 0
+	set_object_state $down_channel 0
 	after $command_pause_millis
 	release_lock $lock_id_transmit
 }
@@ -391,7 +478,10 @@ proc velux::set_level {window_id obj target_level} {
 	
 	set motion_seconds $window(${obj}_motion_seconds)
 	set current_level [get_level_value $window_id $obj]
-	set reed_state [get_reed_state $window_id]
+	set reed_state -1
+	if {$obj == "window"} {
+		set reed_state [get_reed_state $window_id]
+	}
 	if {$reed_state == 1 && $current_level > $ventilation_state && $dryrun == 0} {
 		write_log 2 "reed contact closed, correcting level to ventilation_state ${ventilation_state}"
 		set current_level $ventilation_state
@@ -443,7 +533,7 @@ proc velux::set_level {window_id obj target_level} {
 				set new_level 1.0
 			}
 			
-			if {$level_diff > 0.0 && $new_level > [expr {$ventilation_state + 0.3}]} {
+			if {$obj == "window" && $level_diff > 0.0 && $new_level > [expr {$ventilation_state + 0.3}]} {
 				set reed_state [get_reed_state $window_id]
 				if {$reed_state == 1 && $dryrun == 0} {
 					# reed contact closed, movement failed, correcting level to ventilation_state and aborting
