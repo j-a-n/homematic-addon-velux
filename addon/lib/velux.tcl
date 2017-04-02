@@ -62,7 +62,7 @@ namespace eval velux {
 	variable ventilation_state 0.15
 	variable short_press_millis 750
 	variable command_pause_millis 1000
-	variable dryrun 1
+	variable dryrun 0
 }
 
 # error=1, warning=2, info=3, debug=4
