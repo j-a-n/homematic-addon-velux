@@ -41,44 +41,8 @@
 # ******************************************************************************************************************************************
 #
 # While the shutter of a velux window is moving, the window movement is blocked and vice versa.
-# Therefore channels 1+2, 3+4, 5+6 and so on are understood as channel pairs which will block each other.
-# Every set-state command will wait until the associate channel is unsused.
-#
-# If stop command results in direction change of window / shutter try to increase SHORT_PRESS_TIME.
-# If commands are lost, try to increase CMD_PAUSE_TIME.
-#
-# ******************************************************************************************************************************************
-#
-# string stdout;
-# string stderr;
-# var source  = dom.GetObject("$src$");
-# var name = source.Name();
-# boolean closed = !source.State();
-# 
-# !!! system.Exec("/bin/sh -c 'echo " # name # " " # source.State() # " >> /tmp/log.txt'" , &stdout, &stderr);
-# 
-# var channel = "0";
-# if (name == "BidCos-Wired.LEQ0975591:15.STATE") {
-#    !! Dusche
-#    channel = "1";
-# }
-# if (name == "BidCos-Wired.LEQ0975591:16.STATE") {
-#    !! Bad
-#    channel = "3";
-# }
-# if (name == "BidCos-Wired.LEQ0975591:17.STATE") {
-#    !! Spitzboden
-#    channel = "5";
-# }
-# 
-# !!! system.Exec("/bin/sh -c 'echo " # name + "  " # channel # " " # closed # " >> /tmp/log.txt'" , &stdout, &stderr);
-# 
-# if (closed && channel != "0") {
-#    !!! system.Exec("/bin/sh -c 'echo closed: " # name + "  " # channel # " >> /tmp/log.txt'" , &stdout, &stderr);
-#    system.Exec("/bin/tclsh /usr/local/velux_ctrl/cmd.tcl close-event " # channel, &stdout, &stderr);
-#    !!! WriteLine("stdout: " # stdout);
-#    !!! WriteLine("stderr: " # stderr);
-# }
+# If stop command results in direction change of window / shutter try to increase short_press_millis.
+# If commands are lost, try to increase command_pause_millis.
 #
 # ******************************************************************************************************************************************
 
