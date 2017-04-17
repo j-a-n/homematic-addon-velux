@@ -60,7 +60,7 @@ namespace eval velux {
 	variable lock_id_ini_file 2
 	variable lock_id_transmit 3
 	variable ventilation_state 0.15
-	variable short_press_millis 750
+	variable short_press_millis 1000
 	variable command_pause_millis 1000
 	variable dryrun 0
 }
@@ -78,7 +78,7 @@ proc ::velux::write_log {lvl str} {
 		set process_id [pid]
 		puts $fd "\[${lvl}\] \[${date}\] \[${process_id}\] ${str}"
 		close $fd
-		puts "\[${lvl}\] \[${date}\] \[${process_id}\] ${str}"
+		#puts "\[${lvl}\] \[${date}\] \[${process_id}\] ${str}"
 		release_lock $lock_id_log_file
 	}
 }
@@ -236,21 +236,26 @@ proc ::velux::get_config_json {} {
 	variable lock_id_ini_file
 	acquire_lock $lock_id_ini_file
 	set ini [ini::open $ini_file r]
-	set json "\{\"windows\":\["
+	set json "\{\"global\":\{"
+	set value [json_string [::ini::value $ini "global" "short_press_millis" "750"]]
+	append json "\"short_press_millis\":${value},"
+	set value [json_string [::ini::value $ini "global" "command_pause_millis" "1000"]]
+	append json "\"command_pause_millis\":${value}"
+	append json "\},\"windows\":\["
 	set count 0
 	foreach section [ini::sections $ini] {
 		set idx [string first "window_" $section]
 		if {$idx == 0} {
 			set count [ expr { $count + 1} ]
 			set window_id [string range $section 7 end]
-			append json "{\"id\":\"${window_id}\","
+			append json "\{\"id\":\"${window_id}\","
 			foreach key [ini::keys $ini $section] {
 				set value [::ini::value $ini $section $key]
 				set value [json_string $value]
 				append json "\"${key}\":\"${value}\","
 			}
 			set json [string range $json 0 end-1]
-			append json "},"
+			append json "\},"
 		}
 	}
 	if {$count > 0} {
@@ -259,6 +264,33 @@ proc ::velux::get_config_json {} {
 	append json "\]\}"
 	release_lock $lock_id_ini_file
 	return $json
+}
+
+proc ::velux::read_global_config {} {
+	variable ini_file
+	variable lock_id_ini_file
+	variable short_press_millis
+	variable command_pause_millis
+	write_log 4 "Reading global config"
+	acquire_lock $lock_id_ini_file
+	set ini [ini::open $ini_file r]
+	catch {
+		set short_press_millis [expr { 0 + [::ini::value $ini "global" "short_press_millis" short_press_millis] }]
+		set command_pause_millis [expr { 0 + [::ini::value $ini "global" "command_pause_millis" command_pause_millis] }]
+	}
+	release_lock $lock_id_ini_file
+}
+
+proc ::velux::update_global_config {short_press_millis command_pause_millis} {
+	variable ini_file
+	variable lock_id_ini_file
+	write_log 4 "Updating global config: short_press_millis=${short_press_millis}, command_pause_millis=${command_pause_millis}"
+	acquire_lock $lock_id_ini_file
+	set ini [ini::open $ini_file r+]
+	ini::set $ini "global" "short_press_millis" $short_press_millis
+	ini::set $ini "global" "command_pause_millis" $command_pause_millis
+	ini::commit $ini
+	release_lock $lock_id_ini_file
 }
 
 proc ::velux::create_window {window_id name window_up_channel window_down_channel window_motion_seconds {window_reed_channel ""} {shutter_up_channel ""} {shutter_down_channel ""} {shutter_motion_seconds 0}} {
@@ -464,6 +496,7 @@ proc ::velux::send_command {window_id obj cmd} {
 
 proc velux::window_close_event {window_id_or_channel} {
 	variable ventilation_state
+	
 	set window_id ""
 	if { [catch {expr {abs($window_id_or_channel)}}] } {
 		set window_id [get_window_id_by_param "window_reed_channel" $window_id_or_channel]
@@ -609,3 +642,4 @@ proc velux::reset {{window_id ""}} {
 	}
 }
 
+velux::read_global_config

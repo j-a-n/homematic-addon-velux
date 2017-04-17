@@ -52,6 +52,13 @@ proc process {} {
 				if {$env(REQUEST_METHOD) == "GET"} {
 					return [velux::get_config_json]
 				}
+			} elseif {[lindex $path 2] == "global"} {
+				if {$env(REQUEST_METHOD) == "PUT"} {
+					regexp {\"short_press_millis\"\s*:\s*\"([^\"]+)\"} $data match short_press_millis
+					regexp {\"command_pause_millis\"\s*:\s*\"([^\"]+)\"} $data match command_pause_millis
+					velux::update_global_config $short_press_millis $command_pause_millis
+					return "\"Global config successfully updated\""
+				}
 			} elseif {[lindex $path 2] == "window"} {
 				if {$plen == 3} {
 					if {$env(REQUEST_METHOD) == "PUT"} {

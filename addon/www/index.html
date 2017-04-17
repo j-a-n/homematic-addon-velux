@@ -122,6 +122,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 					$('<td class="center aligned">').append(bedit, bdel)
 				));
 			});
+			
+			var form = $('#form-global-config');
+			form.form('clear');
+			form.form('set values', {
+				short_press_millis: config.global.short_press_millis,
+				command_pause_millis: config.global.command_pause_millis
+			});
+			
 		}
 		
 		function get_config() {
@@ -136,6 +144,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 				in_out_channels = data;
 				in_out_channels.in.sort();
 				in_out_channels.out.sort();
+			});
+		}
+		
+		function update_global_config(config) {
+			rest("PUT", "/config/global", JSON.stringify(config), function(data) {
+				get_config();
+				display_message('success', 'Config successfully updated', 5000);
 			});
 		}
 		
@@ -228,7 +243,29 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 			rest("GET", "/version", null, function(version) {
 				document.title = document.title + " " + version;
 			});
-			var form_config = {
+			var form_global_config = {
+				fields: {
+					short_press_millis: {
+						rules: [{
+							type: 'integer[0..10000]',
+							prompt: 'Please enter a valid integer for the button short press time.'
+						}]
+					},
+					command_pause_millis: {
+						rules: [{
+							type: 'integer[0..10000]',
+							prompt: 'Please enter a valid integer for the command pause time.'
+						}]
+					}
+				},
+				onSuccess: function(event, fields) {
+					var config = $(event.currentTarget).form('get values');
+					update_global_config(config);
+					event.preventDefault();
+				}
+			};
+			$('#form-global-config').form(form_global_config);
+			var form_edit_window_config = {
 				on: 'blur',
 				fields: {
 					id: {
@@ -296,7 +333,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 					event.preventDefault();
 				}
 			};
-			$('#form-edit-window').form(form_config);
+			$('#form-edit-window').form(form_edit_window_config);
 			$('#modal-edit-window').modal({
 				onHide: function() {
 					clear_message();
@@ -307,9 +344,23 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 </head>
 <body>
 	<div style="padding-top: 5vw" class="ui container">
-		<h1 class="ui header">Velux Window Configuration</h1>
+		<h1 class="ui header">Velux Configuration</h1>
 		<div id="message" class="ui message hidden">
 		</div>
+		
+		<h2 class="ui dividing header">Global Config</h2>
+		<form id="form-global-config" class="ui form">
+			<div class="field">
+				<label>Button short press time in milliseconds</label>
+				<input name="short_press_millis" placeholder="" type="text">
+			</div>
+			<div class="field">
+				<label>Command pause time in milliseconds</label>
+				<input name="command_pause_millis" placeholder="" type="text">
+			</div>
+			<div id="submit-global-config" class="ui primary submit button">Submit</div>
+		</form>
+		
 		<h2 class="ui dividing header">Configured Velux Windows</h2>
 		<table id="windows" class="ui celled stackable table">
 			<thead>
