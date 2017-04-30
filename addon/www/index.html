@@ -127,6 +127,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 			form.form('clear');
 			form.form('set values', {
 				short_press_millis: config.global.short_press_millis,
+				long_press_millis: config.global.long_press_millis,
 				command_pause_millis: config.global.command_pause_millis
 			});
 			
@@ -251,6 +252,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 							prompt: 'Please enter a valid integer for the button short press time.'
 						}]
 					},
+					long_press_millis: {
+						rules: [{
+							type: 'integer[0..10000]',
+							prompt: 'Please enter a valid integer for the button long press time.'
+						}]
+					},
 					command_pause_millis: {
 						rules: [{
 							type: 'integer[0..10000]',
@@ -353,6 +360,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 			<div class="field">
 				<label>Button short press time in milliseconds</label>
 				<input name="short_press_millis" placeholder="" type="text">
+			</div>
+			<div class="field">
+				<label>Button long press time in milliseconds</label>
+				<input name="long_press_millis" placeholder="" type="text">
 			</div>
 			<div class="field">
 				<label>Command pause time in milliseconds</label>

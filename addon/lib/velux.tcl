@@ -60,7 +60,8 @@ namespace eval velux {
 	variable lock_id_ini_file 2
 	variable lock_id_transmit 3
 	variable ventilation_state 0.15
-	variable short_press_millis 1000
+	variable short_press_millis 500
+	variable long_press_millis 1500
 	variable command_pause_millis 1000
 	variable dryrun 0
 }
@@ -234,12 +235,17 @@ proc ::velux::get_in_out_channels_json {} {
 proc ::velux::get_config_json {} {
 	variable ini_file
 	variable lock_id_ini_file
+	variable short_press_millis
+	variable long_press_millis
+	variable command_pause_millis
 	acquire_lock $lock_id_ini_file
 	set ini [ini::open $ini_file r]
 	set json "\{\"global\":\{"
-	set value [json_string [::ini::value $ini "global" "short_press_millis" "750"]]
+	set value [json_string [::ini::value $ini "global" "short_press_millis" $short_press_millis]]
 	append json "\"short_press_millis\":${value},"
-	set value [json_string [::ini::value $ini "global" "command_pause_millis" "1000"]]
+	set value [json_string [::ini::value $ini "global" "long_press_millis" $long_press_millis]]
+	append json "\"long_press_millis\":${value},"
+	set value [json_string [::ini::value $ini "global" "command_pause_millis" $command_pause_millis]]
 	append json "\"command_pause_millis\":${value}"
 	append json "\},\"windows\":\["
 	set count 0
@@ -270,24 +276,27 @@ proc ::velux::read_global_config {} {
 	variable ini_file
 	variable lock_id_ini_file
 	variable short_press_millis
+	variable long_press_millis
 	variable command_pause_millis
 	write_log 4 "Reading global config"
 	acquire_lock $lock_id_ini_file
 	set ini [ini::open $ini_file r]
 	catch {
-		set short_press_millis [expr { 0 + [::ini::value $ini "global" "short_press_millis" short_press_millis] }]
-		set command_pause_millis [expr { 0 + [::ini::value $ini "global" "command_pause_millis" command_pause_millis] }]
+		set short_press_millis [expr { 0 + [::ini::value $ini "global" "short_press_millis" $short_press_millis] }]
+		set long_press_millis [expr { 0 + [::ini::value $ini "global" "long_press_millis" $long_press_millis] }]
+		set command_pause_millis [expr { 0 + [::ini::value $ini "global" "command_pause_millis" $command_pause_millis] }]
 	}
 	release_lock $lock_id_ini_file
 }
 
-proc ::velux::update_global_config {short_press_millis command_pause_millis} {
+proc ::velux::update_global_config {short_press_millis long_press_millis command_pause_millis} {
 	variable ini_file
 	variable lock_id_ini_file
-	write_log 4 "Updating global config: short_press_millis=${short_press_millis}, command_pause_millis=${command_pause_millis}"
+	write_log 4 "Updating global config: short_press_millis=${short_press_millis}, long_press_millis=${long_press_millis}, command_pause_millis=${command_pause_millis}"
 	acquire_lock $lock_id_ini_file
 	set ini [ini::open $ini_file r+]
 	ini::set $ini "global" "short_press_millis" $short_press_millis
+	ini::set $ini "global" "long_press_millis" $long_press_millis
 	ini::set $ini "global" "command_pause_millis" $command_pause_millis
 	ini::commit $ini
 	release_lock $lock_id_ini_file
@@ -472,6 +481,7 @@ proc ::velux::get_reed_state {window_id} {
 proc ::velux::send_command {window_id obj cmd} {
 	variable lock_id_transmit
 	variable short_press_millis
+	variable long_press_millis
 	variable command_pause_millis
 	
 	velux::write_log 4 "send_command: ${window_id} ${obj} ${cmd}"
@@ -487,7 +497,11 @@ proc ::velux::send_command {window_id obj cmd} {
 	acquire_lock $lock_id_transmit
 	set_object_state $up_channel $up
 	set_object_state $down_channel $down
-	after $short_press_millis
+	if {$cmd == "stop"} {
+		after $long_press_millis
+	} else {
+		after $short_press_millis
+	}
 	set_object_state $up_channel 0
 	set_object_state $down_channel 0
 	after $command_pause_millis
