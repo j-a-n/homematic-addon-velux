@@ -2,12 +2,15 @@
 
 ## Needed hardware
 You will need one original velux remote control for each shutter and each window you want to control.
+
 Register the remote control with the window or shutter you want to operate.
 Disassemble the remote control, you will just need the circuit board.
 Solder one wire to the up and one to the down button contact.
 You do not need to connect the stop contact.
+
 Connect each wire to an open collector output of a HomeMatic IO-module (i.e. HMW-IO-12-Sw14-DR).
 Give the ouputs a descriptive name (i.e. "BATHROOM_WINDOW_UP" and "BATHROOM_WINDOW_DOWN") to be able to indentify the outputs in the later configuration.
+
 In order to get rid of the batteries, you can use a DC/DC converter (i.e. 7803SRC) to connect your remote control to 24V.
 
 ```
@@ -29,6 +32,8 @@ In order to get rid of the batteries, you can use a DC/DC converter (i.e. 7803SR
                     |    HMW-IO-12-Sw14-DR      |
                     |                           |
 ```
+
+![velux-rc](https://github.com/j-a-n/homematic-addon-velux/raw/master/doc/velux-rc.png)
 
 ## Installation / configuration
 * This addon depends on CUxD.
