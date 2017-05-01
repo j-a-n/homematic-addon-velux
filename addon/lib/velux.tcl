@@ -41,7 +41,8 @@
 # ******************************************************************************************************************************************
 #
 # While the shutter of a velux window is moving, the window movement is blocked and vice versa.
-# If stop command results in direction change of window / shutter try to increase short_press_millis.
+# If up/down command results in a short movement only, decrease short_press_millis.
+# If stop command results in direction change, increase long_press_millis.
 # If commands are lost, try to increase command_pause_millis.
 #
 # ******************************************************************************************************************************************
@@ -448,16 +449,23 @@ proc ::velux::set_level_value {window_id obj lvl} {
 	
 }
 
-proc ::velux::set_object_state {channel val} {
+proc ::velux::set_object_states {states} {
 	variable dryrun
-	if {$channel == ""} {
-		error "Device not set"
+	upvar $states s
+	set rs ""
+	foreach object [lsort [array names s]] {
+		if {$object == ""} {
+			error "Object not set"
+		}
+		if {$dryrun} {
+			write_log 3 "Would set object \"$object\" to state: $s($object) (dryrun)"
+		} else {
+			write_log 3 "Setting object \"$object\" to state: $s($object)"
+			append rs "dom.GetObject(\"$object\").State($s($object));"
+		}
 	}
-	if {$dryrun} {
-		write_log 3 "Would set channel \"$channel\" to state: $val (dryrun)"
-	} else {
-		write_log 3 "Setting channel \"$channel\" to state: $val"
-		rega_script "dom.GetObject(\"$channel\").State($val);"
+	if {$rs != ""} {
+		rega_script $rs
 	}
 	return 0
 }
@@ -495,15 +503,17 @@ proc ::velux::send_command {window_id obj cmd} {
 	if {$cmd == "up"} { set down 0 }
 	if {$cmd == "down"} { set up 0 }
 	acquire_lock $lock_id_transmit
-	set_object_state $up_channel $up
-	set_object_state $down_channel $down
+	set states($up_channel) $up
+	set states($down_channel) $down
+	set_object_states states
 	if {$cmd == "stop"} {
 		after $long_press_millis
 	} else {
 		after $short_press_millis
 	}
-	set_object_state $up_channel 0
-	set_object_state $down_channel 0
+	set states($up_channel) 0
+	set states($down_channel) 0
+	set_object_states states
 	after $command_pause_millis
 	release_lock $lock_id_transmit
 }
