@@ -21,7 +21,7 @@ In order to get rid of the batteries, you can use a DC/DC converter (i.e. 7803SR
                                   |         |       Velux remote control 3UR B01, 946949, 860963 or KLI 110
                                   +---------+               +----------------------------------+
        protect. diode (optional)   |   |   |   3.3V         |                                  |
-  24V------+------->|--------------+   |   +----------------|3V          up     stop   down    |
+  24V------+------->|--------------+   |   +----------------|3V          down   stop   up      |
            |                           |                    |            (+)    ( )    (+)     |
   GND--+---)---------------------------+--------------------|GND          |             |      |
        |   |                                                |             |             |      |
