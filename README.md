@@ -8,7 +8,8 @@ Disassemble the remote control, you will just need the circuit board.
 Solder one wire to the up and one to the down button contact.
 You do not need to connect the stop contact.
 
-Connect each wire to an open collector output of a HomeMatic IO-module (i.e. HMW-IO-12-Sw14-DR).
+Connect the wire from each button to an open collector output of a HomeMatic IO-module (i.e. HMW-IO-12-Sw14-DR).
+Connect the ground of the remote control to the ground of the IO-module.
 Give the ouputs a descriptive name (i.e. "BATHROOM_WINDOW_UP" and "BATHROOM_WINDOW_DOWN") to be able to indentify the outputs in the later configuration.
 
 In order to get rid of the batteries, you can use a DC/DC converter (i.e. 7803SRC) to connect your remote control to 24V.
