@@ -53,34 +53,34 @@ In order to get rid of the batteries, you can use a DC/DC converter (i.e. 7803SR
 * Create a new window for each window and shutter combination.
 * If your window doesn't have a shutter, then leave the shutter config empty.
 * If you want to control a shutter only, then leave the window config empty.
- * Name: A name for the window (i.e. Bathroom window)
- * Window up button channel: Choose the channel connected to the remotes up button (i.e. BATHROOM_WINDOW_UP)
- * Window down button channel: Channel connected to down button (i.e. BATHROOM_WINDOW_DOWN)
- * Window full motion time in seconds: How long does a full window movement take (fully closed <=> fully opened).
- * Window reed switch channel (optional): Reed sensor for window close detection if available
- * Shutter up button channel: Channel connected to up button (window shutter)
- * Shutter down button channel: Channel connected to down button (window shutter)
- * Shutter full motion time in seconds: How long does a full shutter movement take (fully closed <=> fully opened).
+  * Name: A name for the window (i.e. Bathroom window)
+  * Window up button channel: Choose the channel connected to the remotes up button (i.e. BATHROOM_WINDOW_UP)
+  * Window down button channel: Channel connected to down button (i.e. BATHROOM_WINDOW_DOWN)
+  * Window full motion time in seconds: How long does a full window movement take (fully closed <=> fully opened).
+  * Window reed switch channel (optional): Reed sensor for window close detection if available
+  * Shutter up button channel: Channel connected to up button (window shutter)
+  * Shutter down button channel: Channel connected to down button (window shutter)
+  * Shutter full motion time in seconds: How long does a full shutter movement take (fully closed <=> fully opened).
 * After adding the window, you will see an new entry in the table. Yuu will need the window id (ID) for later configuration.
 
 ### CUxD device (Universal-Control-Device)
 * Create new (40) 16-channel universal control device in CUxD
- * Serialnumber: choose a free one
- * Name: choose one, i.e: `Velux control`
- * Device-Icon: whatever you want
- * Control: BLIND (Jalousie)
+  * Serialnumber: choose a free one
+  * Name: choose one, i.e: `Velux control`
+  * Device-Icon: whatever you want
+  * Control: BLIND (Jalousie)
 * Configure the new device in HomeMatic Web-UI.
 * Use one channel for each window / shutter / blind.
 * Configuration for a window:
- * CMD_EXEC: yes
- * CMD_SHORT `/usr/local/addons/velux/velux.tcl set_window <window-id>`
- * CMD_LONG `/usr/local/addons/velux/velux.tcl set_window <window-id>`
- * CMD_STOP `/usr/local/addons/velux/velux.tcl set_window <window-id>`
+  * CMD_EXEC: yes
+  * CMD_SHORT `/usr/local/addons/velux/velux.tcl set_window <window-id>`
+  * CMD_LONG `/usr/local/addons/velux/velux.tcl set_window <window-id>`
+  * CMD_STOP `/usr/local/addons/velux/velux.tcl set_window <window-id>`
 * Configuration for a shutter:
- * CMD_EXEC: yes
- * CMD_SHORT `/usr/local/addons/velux/velux.tcl set_shutter <window-id>`
- * CMD_LONG `/usr/local/addons/velux/velux.tcl set_shutter <window-id>`
- * CMD_STOP `/usr/local/addons/velux/velux.tcl set_shutter <window-id>`
+  * CMD_EXEC: yes
+  * CMD_SHORT `/usr/local/addons/velux/velux.tcl set_shutter <window-id>`
+  * CMD_LONG `/usr/local/addons/velux/velux.tcl set_shutter <window-id>`
+  * CMD_STOP `/usr/local/addons/velux/velux.tcl set_shutter <window-id>`
 
 ## Close detection by reed switch
 If window is closed by the rain sensor the saved window state will differ from the real window position.
