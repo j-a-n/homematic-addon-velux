@@ -470,17 +470,25 @@ proc ::velux::set_object_states {states} {
 	return 0
 }
 
+proc ::velux::get_object_state {window_id object} {
+	set val -1
+	if {$object != ""} {
+		array set ret [rega_script "var val1 = dom.GetObject(\"${object}\").State();" ]
+		set val $ret(val1)
+		write_log 4 "Window ${window_id} object ${object} state: ${val}"
+		if {$val == "false"} {
+			set val  1
+		} elseif {$val == "true"} {
+			set val 0
+		}
+	}
+	return $val
+}
+
 proc ::velux::get_reed_state {window_id} {
 	set channel [get_window_param $window_id "window_reed_channel"]
 	if {$channel != ""} {
-		array set ret [rega_script "var val1 = dom.GetObject(\"${channel}\").State();" ]
-		set val $ret(val1)
-		write_log 4 "Window ${window_id} reed channel ${channel} state: ${val}"
-		if {$val == "false"} {
-			return 1
-		} elseif {$val == "true"} {
-			return 0
-		}
+		return [get_object_state $window_id $channel]
 	}
 	return -1
 }
@@ -549,20 +557,31 @@ proc velux::set_level {window_id obj target_level {extra_movement 0.1}} {
 	variable ventilation_state
 	variable dryrun
 	
+	array set window [get_window $window_id]
+	set up_channel $window(${obj}_up_channel)
+	#set down_channel $window(${obj}_down_channel)
+	
 	if {$target_level == 0 || $target_level == 1} {
 		set rpid [get_process_id $window_id $obj]
 		if { $rpid > 0 } {
 			# Another process running
-			write_log 1 "Another process running, target level $target_level => stop movement"
+			set direction "down"
+			if {[get_object_state $window_id $up_channel] == 1} {
+				set direction "up"
+			}
+			write_log 1 "Another process running (direction: $direction)"
 			acquire_window $window_id $obj
-			send_command $window_id $obj "stop"
-			release_window $window_id $obj
-			set_level_value $window_id $obj [get_level_value $window_id $obj]
-			return
+			if {{direction == "up" && $target_level == 0} || {direction == "down" && $target_level == 1}} {
+				write_log 1 "Direction change, target level $target_level => stop movement"
+				send_command $window_id $obj "stop"
+				release_window $window_id $obj
+				set_level_value $window_id $obj [get_level_value $window_id $obj]
+				return
+			} else {
+				release_window $window_id $obj
+			}
 		}
 	}
-	
-	array set window [get_window $window_id]
 	
 	acquire_window $window_id $obj
 	
