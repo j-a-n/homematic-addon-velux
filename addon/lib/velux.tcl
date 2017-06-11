@@ -471,24 +471,24 @@ proc ::velux::set_object_states {states} {
 }
 
 proc ::velux::get_object_state {window_id object} {
-	set val -1
 	if {$object != ""} {
 		array set ret [rega_script "var val1 = dom.GetObject(\"${object}\").State();" ]
 		set val $ret(val1)
 		write_log 4 "Window ${window_id} object ${object} state: ${val}"
-		if {$val == "false"} {
-			set val  1
-		} elseif {$val == "true"} {
-			set val 0
-		}
+		return $val
 	}
-	return $val
+	return -1
 }
 
 proc ::velux::get_reed_state {window_id} {
 	set channel [get_window_param $window_id "window_reed_channel"]
 	if {$channel != ""} {
-		return [get_object_state $window_id $channel]
+		set val [get_object_state $window_id $channel]
+		if {$val == "false"} {
+			return 1
+		} elseif {$val == "true"} {
+			return 0
+		}
 	}
 	return -1
 }
@@ -505,6 +505,8 @@ proc ::velux::send_command {window_id obj cmd} {
 	array set window [get_window $window_id]
 	set up_channel $window(${obj}_up_channel)
 	set down_channel $window(${obj}_down_channel)
+	
+	set_window_param $window_id "${obj}_last_command" $cmd
 	
 	set up 1
 	set down 1
@@ -559,19 +561,21 @@ proc velux::set_level {window_id obj target_level {extra_movement 0.1}} {
 	
 	array set window [get_window $window_id]
 	set up_channel $window(${obj}_up_channel)
-	#set down_channel $window(${obj}_down_channel)
+	set down_channel $window(${obj}_down_channel)
+	
+	set up [get_object_state $window_id $up_channel]
+	set down [get_object_state $window_id $down_channel]
+	
+	write_log 1 "$up_channel: $up, $down_channel: $down"
 	
 	if {$target_level == 0 || $target_level == 1} {
 		set rpid [get_process_id $window_id $obj]
 		if { $rpid > 0 } {
 			# Another process running
-			set direction "down"
-			if {[get_object_state $window_id $up_channel] == 1} {
-				set direction "up"
-			}
-			write_log 1 "Another process running (direction: $direction)"
+			set last_command [get_window_param $window_id "${obj}_last_command"]
+			write_log 1 "Another process running (last_command: $last_command)"
 			acquire_window $window_id $obj
-			if {{direction == "up" && $target_level == 0} || {direction == "down" && $target_level == 1}} {
+			if {[expr {$last_command == "up" && $target_level == 0}] || [expr {$last_command == "down" && $target_level == 1}]} {
 				write_log 1 "Direction change, target level $target_level => stop movement"
 				send_command $window_id $obj "stop"
 				release_window $window_id $obj
