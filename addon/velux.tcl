@@ -45,6 +45,8 @@ proc usage {} {
 	puts stderr "possible commands:"
 	puts stderr "  set_window <window_id> \[level\]                set window to level"
 	puts stderr "  set_shutter <window_id> \[level\]               set shutter to level"
+	puts stderr "  stop_window <window_id> \[level\]               stop window movement"
+	puts stderr "  stop_shutter <window_id> \[level\]              stop shutter movement"
 	puts stderr "  window_close_event <window_id|reed_channel>   window close event (reed contact)"
 	puts stderr "  reset \[window_id\]                             reset window or all windows if window_id omitted"
 	puts stderr ""
@@ -78,6 +80,13 @@ proc main {} {
 		} elseif {$cmd == "set_shutter"} {
 			velux::set_level $window_id "shutter" $target_level
 		}
+	} elseif {$cmd == "stop_window" || $cmd == "stop_shutter"} {
+		set window_id [string tolower [lindex $argv 1]]
+		if {$cmd == "stop_window"} {
+			velux::stop_movement $window_id "window"
+		} elseif {$cmd == "stop_shutter"} {
+			velux::stop_movement $window_id "shutter"
+		}
 	} elseif {$cmd == "window_close_event"} {
 		set window_id_or_channel [lindex $argv 1]
 		if {$window_id_or_channel == ""} {
@@ -94,7 +103,7 @@ proc main {} {
 		} else {
 			velux::write_log 4 "Window ${window_id}: ${cmd}"
 			velux::reset $window_id
-		}	
+		}
 	} else {
 		usage
 		exit 1

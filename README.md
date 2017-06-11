@@ -75,12 +75,12 @@ In order to get rid of the batteries, you can use a DC/DC converter (i.e. 7803SR
   * CMD_EXEC: yes
   * CMD_SHORT `/usr/local/addons/velux/velux.tcl set_window <window-id>`
   * CMD_LONG `/usr/local/addons/velux/velux.tcl set_window <window-id>`
-  * CMD_STOP `/usr/local/addons/velux/velux.tcl set_window <window-id>`
+  * CMD_STOP `/usr/local/addons/velux/velux.tcl stop_window <window-id>`
 * Configuration for a shutter:
   * CMD_EXEC: yes
   * CMD_SHORT `/usr/local/addons/velux/velux.tcl set_shutter <window-id>`
   * CMD_LONG `/usr/local/addons/velux/velux.tcl set_shutter <window-id>`
-  * CMD_STOP `/usr/local/addons/velux/velux.tcl set_shutter <window-id>`
+  * CMD_STOP `/usr/local/addons/velux/velux.tcl stop_shutter <window-id>`
 
 ## Close detection by reed switch
 If window is closed by the rain sensor the saved window state will differ from the real window position.

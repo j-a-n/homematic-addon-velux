@@ -555,34 +555,29 @@ proc velux::window_close_event {window_id_or_channel} {
 	}
 }
 
+proc velux::stop_movement {window_id obj} {
+	acquire_window $window_id $obj
+	send_command $window_id $obj "stop"
+	release_window $window_id $obj
+	set_level_value $window_id $obj [get_level_value $window_id $obj]
+}
+
 proc velux::set_level {window_id obj target_level {extra_movement 0.1}} {
 	variable ventilation_state
 	variable dryrun
 	
 	array set window [get_window $window_id]
-	set up_channel $window(${obj}_up_channel)
-	set down_channel $window(${obj}_down_channel)
-	
-	set up [get_object_state $window_id $up_channel]
-	set down [get_object_state $window_id $down_channel]
-	
-	write_log 1 "$up_channel: $up, $down_channel: $down"
+	set last_command $window(${obj}_last_command)
 	
 	if {$target_level == 0 || $target_level == 1} {
 		set rpid [get_process_id $window_id $obj]
 		if { $rpid > 0 } {
 			# Another process running
-			set last_command [get_window_param $window_id "${obj}_last_command"]
 			write_log 1 "Another process running (last_command: $last_command)"
-			acquire_window $window_id $obj
 			if {[expr {$last_command == "up" && $target_level == 0}] || [expr {$last_command == "down" && $target_level == 1}]} {
 				write_log 1 "Direction change, target level $target_level => stop movement"
-				send_command $window_id $obj "stop"
-				release_window $window_id $obj
-				set_level_value $window_id $obj [get_level_value $window_id $obj]
+				stop_movement $window_id $obj
 				return
-			} else {
-				release_window $window_id $obj
 			}
 		}
 	}
