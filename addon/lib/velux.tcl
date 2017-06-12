@@ -567,7 +567,10 @@ proc velux::set_level {window_id obj target_level {extra_movement 0.1}} {
 	variable dryrun
 	
 	array set window [get_window $window_id]
-	set last_command $window(${obj}_last_command)
+	set last_command "stop"
+	if { [info exists window(${obj}_last_command)] } {
+		set last_command $window(${obj}_last_command)
+	}
 	
 	if {$target_level == 0 || $target_level == 1} {
 		set rpid [get_process_id $window_id $obj]
