@@ -128,7 +128,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 			form.form('set values', {
 				short_press_millis: config.global.short_press_millis,
 				long_press_millis: config.global.long_press_millis,
-				command_pause_millis: config.global.command_pause_millis
+				command_pause_millis: config.global.command_pause_millis,
+				log_level: config.global.log_level
 			});
 			
 		}
@@ -279,6 +280,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 							type: 'integer[0..10000]',
 							prompt: 'Please enter a valid integer for the command pause time.'
 						}]
+					},
+					log_level: {
+						rules: [{
+							type: 'integer[0..4]',
+							prompt: 'Please enter a valid log level.'
+						}]
 					}
 				},
 				onSuccess: function(event, fields) {
@@ -398,6 +405,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 			<div class="field">
 				<label>Command pause time in milliseconds</label>
 				<input name="command_pause_millis" placeholder="" type="text">
+			</div>
+			<div class="field">
+				<label>Log level (error=1, warning=2, info=3, debug=4)</label>
+				<input name="log_level" placeholder="" type="text">
 			</div>
 			<div id="submit-global-config" class="ui primary submit button">Submit</div>
 		</form>

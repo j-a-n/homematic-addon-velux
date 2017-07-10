@@ -54,7 +54,7 @@ namespace eval velux {
 	variable version_file "/usr/local/addons/velux/VERSION"
 	variable ini_file "/usr/local/addons/velux/etc/velux.conf"
 	variable log_file "/tmp/velux-addon-log.txt"
-	variable log_level 4
+	variable log_level 0
 	variable lock_start_port 11100
 	variable lock_socket
 	variable lock_id_log_file 1
@@ -264,12 +264,15 @@ proc ::velux::get_channels_json {} {
 proc ::velux::get_config_json {} {
 	variable ini_file
 	variable lock_id_ini_file
+	variable log_level
 	variable short_press_millis
 	variable long_press_millis
 	variable command_pause_millis
 	acquire_lock $lock_id_ini_file
 	set ini [ini::open $ini_file r]
 	set json "\{\"global\":\{"
+	set value [json_string [::ini::value $ini "global" "log_level" $log_level]]
+	append json "\"log_level\":${value},"
 	set value [json_string [::ini::value $ini "global" "short_press_millis" $short_press_millis]]
 	append json "\"short_press_millis\":${value},"
 	set value [json_string [::ini::value $ini "global" "long_press_millis" $long_press_millis]]
@@ -304,6 +307,7 @@ proc ::velux::get_config_json {} {
 proc ::velux::read_global_config {} {
 	variable ini_file
 	variable lock_id_ini_file
+	variable log_level
 	variable short_press_millis
 	variable long_press_millis
 	variable command_pause_millis
@@ -311,6 +315,7 @@ proc ::velux::read_global_config {} {
 	acquire_lock $lock_id_ini_file
 	set ini [ini::open $ini_file r]
 	catch {
+		set log_level [expr { 0 + [::ini::value $ini "global" "log_level" $log_level] }]
 		set short_press_millis [expr { 0 + [::ini::value $ini "global" "short_press_millis" $short_press_millis] }]
 		set long_press_millis [expr { 0 + [::ini::value $ini "global" "long_press_millis" $long_press_millis] }]
 		set command_pause_millis [expr { 0 + [::ini::value $ini "global" "command_pause_millis" $command_pause_millis] }]
@@ -318,12 +323,13 @@ proc ::velux::read_global_config {} {
 	release_lock $lock_id_ini_file
 }
 
-proc ::velux::update_global_config {short_press_millis long_press_millis command_pause_millis} {
+proc ::velux::update_global_config {log_level short_press_millis long_press_millis command_pause_millis} {
 	variable ini_file
 	variable lock_id_ini_file
-	write_log 4 "Updating global config: short_press_millis=${short_press_millis}, long_press_millis=${long_press_millis}, command_pause_millis=${command_pause_millis}"
+	write_log 4 "Updating global config: log_level=${log_level} short_press_millis=${short_press_millis}, long_press_millis=${long_press_millis}, command_pause_millis=${command_pause_millis}"
 	acquire_lock $lock_id_ini_file
 	set ini [ini::open $ini_file r+]
+	ini::set $ini "global" "log_level" $log_level
 	ini::set $ini "global" "short_press_millis" $short_press_millis
 	ini::set $ini "global" "long_press_millis" $long_press_millis
 	ini::set $ini "global" "command_pause_millis" $command_pause_millis
