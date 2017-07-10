@@ -31,13 +31,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 	<title>Velux Addon</title>
 	<script>
 		var config = {};
-		var in_out_channels = {};
+		var channels = {};
 		var config_loaded = false;
 		var message_timer_id = null;
 		
 		$(document).ready(function() {
 			get_config();
-			get_in_out_channels();
+			get_channels();
 		});
 		
 		function display_message(type, html, millis) {
@@ -140,11 +140,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 				update_view();
 			});
 		}
-		function get_in_out_channels() {
-			rest("GET", "/get_in_out_channels", "", function(data) {
-				in_out_channels = data;
-				in_out_channels.in.sort();
-				in_out_channels.out.sort();
+		
+		function get_channels() {
+			rest("GET", "/get_channels", "", function(data) {
+				channels = data;
+				channels.in.sort();
+				channels.out.sort();
+				channels.cuxd.sort();
 			});
 		}
 		
@@ -183,15 +185,25 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 		function edit_config_window(id) {
 			config.windows.forEach(function(window) {
 				if (window.id == id) {
+					var window_channel = $("select[name='window_channel']");
 					var window_up_channel = $("select[name='window_up_channel']");
 					var window_down_channel = $("select[name='window_down_channel']");
+					var shutter_channel = $("select[name='shutter_channel']");
 					var shutter_up_channel = $("select[name='shutter_up_channel']");
 					var shutter_down_channel = $("select[name='shutter_down_channel']");
+					window_channel.empty();
 					window_up_channel.empty();
 					window_down_channel.empty();
+					shutter_channel.empty();
 					shutter_up_channel.empty();
 					shutter_down_channel.empty();
-					in_out_channels.out.forEach(function(channel) {
+					
+					channels.cuxd.forEach(function(channel) {
+						$("<option/>").val(channel).text(channel).appendTo(window_channel);
+						$("<option/>").val(channel).text(channel).appendTo(shutter_channel);
+					});
+					
+					channels.out.forEach(function(channel) {
 						$("<option/>").val(channel).text(channel).appendTo(window_up_channel);
 						$("<option/>").val(channel).text(channel).appendTo(window_down_channel);
 						$("<option/>").val(channel).text(channel).appendTo(shutter_up_channel);
@@ -200,7 +212,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 					
 					var window_reed_channel = $("select[name='window_reed_channel']");
 					window_reed_channel.empty();
-					in_out_channels.in.forEach(function(channel) {
+					channels.in.forEach(function(channel) {
 						$("<option/>").val(channel).text(channel).appendTo(window_reed_channel);
 					});
 					
@@ -209,10 +221,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 					form.form('set values', {
 						id: window.id,
 						name: window.name || '',
+						window_channel: window.window_channel || '',
 						window_up_channel: window.window_up_channel || '',
 						window_down_channel: window.window_down_channel || '',
 						window_motion_seconds: window.window_motion_seconds || '',
 						window_reed_channel: window.window_reed_channel || '',
+						shutter_channel: window.shutter_channel || '',
 						shutter_up_channel: window.shutter_up_channel || '',
 						shutter_down_channel: window.shutter_down_channel || '',
 						shutter_motion_seconds: window.shutter_motion_seconds || ''
@@ -228,6 +242,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 			var form = $('#form-edit-window');
 			form.form('clear');
 			form.find("input[name='id']").parent().css('display', 'none');
+			form.find("select[name='window_channel']").parent().css('display', 'none');
+			form.find("select[name='shutter_channel']").parent().css('display', 'none');
 			$('#modal-edit-window').modal('show');
 		}
 		
@@ -283,22 +299,26 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 							prompt: 'Please enter a valid window name.'
 						}]
 					},
-					window_up_channel: {
+					window_channel: {
 						optional: true,
+						rules: [{
+							type: 'empty',
+							prompt: 'Please select the CUxD channel of the window.'
+						}]
+					},
+					window_up_channel: {
 						rules: [{
 							type: 'empty',
 							prompt: 'Please select a channel for the window up button.'
 						}]
 					},
 					window_down_channel: {
-						optional: true,
 						rules: [{
 							type: 'empty',
 							prompt: 'Please select a channel for the window down button.'
 						}]
 					},
 					window_motion_seconds: {
-						optional: true,
 						rules: [{
 							type: 'integer[0..100]',
 							prompt: 'Please enter a valid integer for the window full motion time.'
@@ -309,6 +329,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 						rules: [{
 							type: 'empty',
 							prompt: 'Please select a channel for the window reed switch.'
+						}]
+					},
+					shutter_channel: {
+						optional: true,
+						rules: [{
+							type: 'empty',
+							prompt: 'Please select the CUxD channel of the shutter.'
 						}]
 					},
 					shutter_up_channel: {
@@ -411,6 +438,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 					<input name="name" placeholder="Name" type="text">
 				</div>
 				<div class="field">
+					<label>Window CUxD channel</label>
+					<select class="ui dropdown" name="window_channel">
+					</select>
+				</div>
+				<div class="field">
 					<label>Window up button channel</label>
 					<select class="ui dropdown" name="window_up_channel">
 					</select>
@@ -427,6 +459,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 				<div class="field">
 					<label>Window reed switch channel (optional)</label>
 					<select class="ui dropdown" name="window_reed_channel">
+					</select>
+				</div>
+				<div class="field">
+					<label>Shutter CUxD channel</label>
+					<select class="ui dropdown" name="shutter_channel">
 					</select>
 				</div>
 				<div class="field">

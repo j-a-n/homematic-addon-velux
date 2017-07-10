@@ -176,7 +176,7 @@ proc ::velux::release_window {window_id obj} {
 	}
 }
 
-proc ::velux::get_in_out_channels_json {} {
+proc ::velux::get_channels_json {} {
 	set json "\{\"in\":\["
 	array set data [rega_script "
 		string deviceid;
@@ -228,6 +228,34 @@ proc ::velux::get_in_out_channels_json {} {
 	if {$count > 0} {
 		set json [string range $json 0 end-1]
 	}
+	
+	append json "\],\"cuxd\":\["
+	
+	array set data [rega_script "
+		string deviceid;
+		foreach(deviceid, dom.GetObject(ID_DEVICES).EnumUsedIDs()) {
+			var device = dom.GetObject(deviceid);
+			if (device.Interface() == 3313) {
+				string channelid;
+				foreach(channelid,device.Channels().EnumUsedIDs()) {
+					var channel = dom.GetObject(channelid);
+					WriteLine(channel.Address());
+				}
+			}
+		}
+	"]
+	set count 0
+	foreach d [split [encoding convertfrom utf-8 $data(STDOUT)] "\n"] {
+		set d [string trim $d]
+		if {$d != ""} {
+			set count [ expr { $count + 1} ]
+			append json "\"${d}\","
+		}
+	}
+	if {$count > 0} {
+		set json [string range $json 0 end-1]
+	}
+	
 	append json "\]\}"
 	
 	return $json
@@ -303,18 +331,20 @@ proc ::velux::update_global_config {short_press_millis long_press_millis command
 	release_lock $lock_id_ini_file
 }
 
-proc ::velux::create_window {window_id name window_up_channel window_down_channel window_motion_seconds {window_reed_channel ""} {shutter_up_channel ""} {shutter_down_channel ""} {shutter_motion_seconds 0}} {
+proc ::velux::create_window {window_id name {window_channel ""} window_up_channel window_down_channel window_motion_seconds {window_reed_channel ""} {shutter_channel ""} {shutter_up_channel ""} {shutter_down_channel ""} {shutter_motion_seconds 0}} {
 	variable ini_file
 	variable lock_id_ini_file
 	acquire_lock $lock_id_ini_file
 	set ini [ini::open $ini_file r+]
 	ini::set $ini "window_${window_id}" "name" $name
+	ini::set $ini "window_${window_id}" "window_channel" $window_channel
 	ini::set $ini "window_${window_id}" "window_up_channel" $window_up_channel
 	ini::set $ini "window_${window_id}" "window_down_channel" $window_down_channel
 	ini::set $ini "window_${window_id}" "window_motion_seconds" $window_motion_seconds
 	ini::set $ini "window_${window_id}" "window_reed_channel" $window_reed_channel
 	ini::set $ini "window_${window_id}" "window_level" "0.0"
 	ini::set $ini "window_${window_id}" "window_pid" "0"
+	ini::set $ini "window_${window_id}" "shutter_channel" $shutter_channel
 	ini::set $ini "window_${window_id}" "shutter_up_channel" $shutter_up_channel
 	ini::set $ini "window_${window_id}" "shutter_down_channel" $shutter_down_channel
 	ini::set $ini "window_${window_id}" "shutter_motion_seconds" $shutter_motion_seconds
@@ -391,12 +421,13 @@ proc ::velux::get_window_param {window_id param} {
 		if {$param == "window_level" || $param == "shutter_level"} {
 			return 0
 		}
+		return ""
 	}
 	return $window($param)
 }
 
 proc ::velux::shutter_configured {window_id} {
-	if { [velux::get_window_param $window_id "shutter_up_channel"] != ""} {
+	if { [get_window_param $window_id "shutter_up_channel"] != ""} {
 		return 1
 	}
 	return 0
@@ -442,9 +473,10 @@ proc ::velux::get_level_value {window_id obj} {
 proc ::velux::set_level_value {window_id obj lvl} {
 	global env
 	set_window_param $window_id "${obj}_level" $lvl
-	if { [info exists ::env(CUXD_CHANNEL) ] } {
-		write_log 4 "Setting channel \"CUxD.$env(CUXD_CHANNEL)\" to state: $lvl"
-		rega_script "dom.GetObject(\"CUxD.$env(CUXD_CHANNEL).SET_STATE\").State(\"$lvl\");"
+	set channel [get_window_param $window_id "${obj}_channel"]
+	if {$channel != ""} {
+		write_log 4 "Setting channel \"CUxD.$channel\" to state: $lvl"
+		rega_script "dom.GetObject(\"CUxD.$channel.SET_STATE\").State(\"$lvl\");"
 	}
 	
 }
@@ -563,10 +595,19 @@ proc velux::stop_movement {window_id obj} {
 }
 
 proc velux::set_level {window_id obj target_level {extra_movement 0.1}} {
+	global env
 	variable ventilation_state
 	variable dryrun
 	
 	array set window [get_window $window_id]
+	if { ![info exists window(${obj}_channel)] } {
+		if { [info exists ::env(CUXD_CHANNEL) ] } {
+			# Store device channel if missing in config
+			set window(${obj}_channel) $env(CUXD_CHANNEL)
+			set_window_param $window_id "${obj}_channel" $env(CUXD_CHANNEL)
+		}
+	}
+	
 	set last_command "stop"
 	if { [info exists window(${obj}_last_command)] } {
 		set last_command $window(${obj}_last_command)
