@@ -1,7 +1,7 @@
 # HomeMatic addon to control velux windows and shutters
 
 ## Needed hardware
-You will need one original velux remote control for each shutter and each window you want to control.
+You will need one original velux remote control (3UR B01, 946949, 860963 or KLI 110) for each shutter and each window you want to control.
 
 Register the remote control with the window or shutter you want to operate.
 Disassemble the remote control, you will just need the circuit board.
