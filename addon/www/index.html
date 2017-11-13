@@ -184,40 +184,48 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 		}
 		
 		function edit_config_window(id) {
+			var window_channel = $("select[name='window_channel']");
+			var window_up_channel = $("select[name='window_up_channel']");
+			var window_down_channel = $("select[name='window_down_channel']");
+			var shutter_channel = $("select[name='shutter_channel']");
+			var shutter_up_channel = $("select[name='shutter_up_channel']");
+			var shutter_down_channel = $("select[name='shutter_down_channel']");
+			window_channel.empty();
+			window_up_channel.empty();
+			window_down_channel.empty();
+			shutter_channel.empty();
+			shutter_up_channel.empty();
+			shutter_down_channel.empty();
+			
+			$("<option/>").val("").text("").appendTo(window_channel);
+			$("<option/>").val("").text("").appendTo(shutter_channel);
+			channels.cuxd.forEach(function(channel) {
+				$("<option/>").val(channel).text(channel).appendTo(window_channel);
+				$("<option/>").val(channel).text(channel).appendTo(shutter_channel);
+			});
+			
+			$("<option/>").val("").text("").appendTo(window_up_channel);
+			$("<option/>").val("").text("").appendTo(window_down_channel);
+			$("<option/>").val("").text("").appendTo(shutter_up_channel);
+			$("<option/>").val("").text("").appendTo(shutter_down_channel);
+			channels.out.forEach(function(channel) {
+				$("<option/>").val(channel).text(channel).appendTo(window_up_channel);
+				$("<option/>").val(channel).text(channel).appendTo(window_down_channel);
+				$("<option/>").val(channel).text(channel).appendTo(shutter_up_channel);
+				$("<option/>").val(channel).text(channel).appendTo(shutter_down_channel);
+			});
+			
+			var window_reed_channel = $("select[name='window_reed_channel']");
+			window_reed_channel.empty();
+			$("<option/>").val("").text("").appendTo(window_reed_channel);
+			channels.in.forEach(function(channel) {
+				$("<option/>").val(channel).text(channel).appendTo(window_reed_channel);
+			});
+			
+			var form = $('#form-edit-window');
+			form.form('set value', 'id', id);
 			config.windows.forEach(function(window) {
 				if (window.id == id) {
-					var window_channel = $("select[name='window_channel']");
-					var window_up_channel = $("select[name='window_up_channel']");
-					var window_down_channel = $("select[name='window_down_channel']");
-					var shutter_channel = $("select[name='shutter_channel']");
-					var shutter_up_channel = $("select[name='shutter_up_channel']");
-					var shutter_down_channel = $("select[name='shutter_down_channel']");
-					window_channel.empty();
-					window_up_channel.empty();
-					window_down_channel.empty();
-					shutter_channel.empty();
-					shutter_up_channel.empty();
-					shutter_down_channel.empty();
-					
-					channels.cuxd.forEach(function(channel) {
-						$("<option/>").val(channel).text(channel).appendTo(window_channel);
-						$("<option/>").val(channel).text(channel).appendTo(shutter_channel);
-					});
-					
-					channels.out.forEach(function(channel) {
-						$("<option/>").val(channel).text(channel).appendTo(window_up_channel);
-						$("<option/>").val(channel).text(channel).appendTo(window_down_channel);
-						$("<option/>").val(channel).text(channel).appendTo(shutter_up_channel);
-						$("<option/>").val(channel).text(channel).appendTo(shutter_down_channel);
-					});
-					
-					var window_reed_channel = $("select[name='window_reed_channel']");
-					window_reed_channel.empty();
-					channels.in.forEach(function(channel) {
-						$("<option/>").val(channel).text(channel).appendTo(window_reed_channel);
-					});
-					
-					var form = $('#form-edit-window');
 					form.form('clear');
 					form.form('set values', {
 						id: window.id,
@@ -232,20 +240,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 						shutter_down_channel: window.shutter_down_channel || '',
 						shutter_motion_seconds: window.shutter_motion_seconds || ''
 					});
-					form.find("input[name='id']").parent().css('display', 'block');
-					clear_message();
-					$('#modal-edit-window').modal('show');
 				}
+				form.find("input[name='id']").parent().css('display', 'block');
 			});
+			clear_message();
+			$('#modal-edit-window').modal('show');
 		}
 		
 		function add_window() {
 			var form = $('#form-edit-window');
 			form.form('clear');
 			form.find("input[name='id']").parent().css('display', 'none');
-			form.find("select[name='window_channel']").parent().css('display', 'none');
-			form.find("select[name='shutter_channel']").parent().css('display', 'none');
-			$('#modal-edit-window').modal('show');
+			//form.find("select[name='window_channel']").parent().css('display', 'none');
+			//form.find("select[name='shutter_channel']").parent().css('display', 'none');
+			edit_config_window(get_window_id());
 		}
 		
 		function api_request(window_id, method, path, data, success_callback) {
@@ -370,9 +378,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 				onSuccess: function(event, fields) {
 					$(event.currentTarget).closest("div.modal").modal('hide');
 					var window = $(event.currentTarget).form('get values');
-					if (!window.id) {
-						window.id = get_window_id();
-					}
 					update_config_window(window);
 					event.preventDefault();
 				}
