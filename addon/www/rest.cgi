@@ -77,6 +77,9 @@ proc process {} {
 						regexp {\"shutter_down_channel\"\s*:\s*\"([^\"]+)\"} $data match shutter_down_channel
 						regexp {\"shutter_motion_seconds\"\s*:\s*\"([^\"]+)\"} $data match shutter_motion_seconds
 						if { ![info exists window_channel ] } { set window_channel "" }
+						if { ![info exists window_up_channel ] } { set window_up_channel "" }
+						if { ![info exists window_down_channel ] } { set window_down_channel "" }
+						if { ![info exists window_motion_seconds ] } { set window_motion_seconds "" }
 						if { ![info exists window_reed_channel ] } { set window_reed_channel "" }
 						if { ![info exists shutter_channel ] } { set shutter_channel "" }
 						if { ![info exists shutter_up_channel ] } { set shutter_up_channel "" }

@@ -322,18 +322,21 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 						}]
 					},
 					window_up_channel: {
+						optional: true,
 						rules: [{
 							type: 'empty',
 							prompt: 'Please select a channel for the window up button.'
 						}]
 					},
 					window_down_channel: {
+						optional: true,
 						rules: [{
 							type: 'empty',
 							prompt: 'Please select a channel for the window down button.'
 						}]
 					},
 					window_motion_seconds: {
+						optional: true,
 						rules: [{
 							type: 'integer[0..100]',
 							prompt: 'Please enter a valid integer for the window full motion time.'
