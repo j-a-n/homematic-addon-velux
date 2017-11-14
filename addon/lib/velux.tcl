@@ -100,6 +100,7 @@ proc ::velux::acquire_lock {lock_id} {
 	# 'socket already in use' error will be our lock detection mechanism
 	while {1} {
 		if { [catch {socket -server dummy_accept $port} sock] } {
+			#write_log 4 "Could not acquire lock"
 			after 25
 		} else {
 			set lock_socket($lock_id) $sock
@@ -210,7 +211,7 @@ proc ::velux::get_channels_json {} {
 			string channelid;
 			foreach(channelid,device.Channels().EnumUsedIDs()) {
 				var channel = dom.GetObject(channelid);
-				if (((channel.ChnLabel() == 'INPUT_OUTPUT') || (channel.ChnLabel() == 'DIGITAL_OUTPUT') || (channel.ChnLabel() == 'DIGITAL_ANALOG_OUTPUT')) && ((channel.ChnDirection() == 0) || (channel.ChnDirection() == 2))) {
+				if (((channel.ChnLabel() == 'INPUT_OUTPUT') || (channel.ChnLabel() == 'DIGITAL_OUTPUT') || (channel.ChnLabel() == 'DIGITAL_ANALOG_OUTPUT') || (channel.ChnLabel() == 'SWITCH')) && ((channel.ChnDirection() == 0) || (channel.ChnDirection() == 2))) {
 					WriteLine(channel.Name());
 				}
 			}
@@ -234,7 +235,8 @@ proc ::velux::get_channels_json {} {
 		string deviceid;
 		foreach(deviceid, dom.GetObject(ID_DEVICES).EnumUsedIDs()) {
 			var device = dom.GetObject(deviceid);
-			if (device.Interface() == 3313) {
+			var interface = dom.GetObject(device.Interface());
+			if (interface.Name() == 'CUxD') {
 				string channelid;
 				foreach(channelid,device.Channels().EnumUsedIDs()) {
 					var channel = dom.GetObject(channelid);
