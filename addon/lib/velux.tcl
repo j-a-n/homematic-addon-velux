@@ -297,6 +297,7 @@ proc ::velux::get_config_json {} {
 			append json "\},"
 		}
 	}
+	ini::close $ini
 	if {$count > 0} {
 		set json [string range $json 0 end-1]
 	}
@@ -321,6 +322,7 @@ proc ::velux::read_global_config {} {
 		set long_press_millis [expr { 0 + [::ini::value $ini "global" "long_press_millis" $long_press_millis] }]
 		set command_pause_millis [expr { 0 + [::ini::value $ini "global" "command_pause_millis" $command_pause_millis] }]
 	}
+	ini::close $ini
 	release_lock $lock_id_ini_file
 }
 
@@ -373,6 +375,7 @@ proc ::velux::get_window_ids {} {
 			lappend window_ids [string range $section 7 end]
 		}
 	}
+	ini::close $ini
 	release_lock $lock_id_ini_file
 	return $window_ids
 }
@@ -393,6 +396,7 @@ proc ::velux::get_window {window_id} {
 			}
 		}
 	}
+	ini::close $ini
 	release_lock $lock_id_ini_file
 	if {$window(id) == ""} {
 		error "Window ${window_id} not configured."
@@ -415,6 +419,7 @@ proc ::velux::get_window_id_by_param {param val} {
 			}
 		}
 	}
+	ini::close $ini
 	release_lock $lock_id_ini_file
 	if {$window_id == ""} {
 		error "Window not found by ${param}=${val}."
@@ -456,6 +461,8 @@ proc ::velux::set_window_param {window_id param value} {
 	if {$found} {
 		ini::set $ini "window_${window_id}" $param $value
 		ini::commit $ini
+	} else {
+		ini::close $ini
 	}
 	release_lock $lock_id_ini_file
 	if {!$found} {
