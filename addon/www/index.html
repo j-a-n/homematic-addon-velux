@@ -265,6 +265,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 			});
 		}
 		
+		function show_log() {
+			var win = window.open('log.cgi', '_blank');
+			win.focus();
+		}
+		
 		$(document).ready(function() {
 			rest("GET", "/version", null, function(version) {
 				document.title = document.title + " " + version;
@@ -436,6 +441,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 		<div onclick="add_window();" class="ui blue basic button">
 		<i class="plus icon"></i>
 		Add Velux Window
+		</div>
+		<div class="ui right aligned grid">
+			<div class="right floated right aligned twelve wide column">
+				<div onclick="show_log();" class="ui blue basic button">
+				<i class="file text outline icon"></i>
+				Show addon log
+				</div>
+			</div>
 		</div>
 	</div>
 	
