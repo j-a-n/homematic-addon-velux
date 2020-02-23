@@ -668,9 +668,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 			<h3 class="ui dividing header">Window</h3>
 			<div class="fields">
 				<div class="ui buttons">
-					<button class="ui button" onmousedown="control_window($(this).data('window_id'), 'window', 'down');" onmouseup="control_window($(this).data('window_id'), 'window', 'stop');">Close</button>
+					<button class="ui button" onpointerdown="control_window($(this).data('window_id'), 'window', 'down');" onpointerup="control_window($(this).data('window_id'), 'window', 'stop');">Close</button>
 					<div class="or" data-text="or"></div>
-					<button class="ui positive button" onmousedown="control_window($(this).data('window_id'), 'window', 'up');" onmouseup="control_window($(this).data('window_id'), 'window', 'stop');">Open</button>
+					<button class="ui positive button" onpointerdown="control_window($(this).data('window_id'), 'window', 'up');" onpointerup="control_window($(this).data('window_id'), 'window', 'stop');">Open</button>
 				</div>
 				<button class="ui red button" onclick="control_window($(this).data('window_id'), 'window', 'stop');">Stop</button>
 			</div>
@@ -678,9 +678,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 			<h3 class="ui dividing header" id="shutter-control-title">Shutter</h3>
 			<div class="fields" id="shutter-control-fields">
 				<div class="ui buttons">
-					<button class="ui button" onmousedown="control_window($(this).data('window_id'), 'shutter', 'down');" onmouseup="control_window($(this).data('window_id'), 'shutter', 'stop');">Close</button>
+					<button class="ui button" onpointerdown="control_window($(this).data('window_id'), 'shutter', 'down');" onpointerup="control_window($(this).data('window_id'), 'shutter', 'stop');">Close</button>
 					<div class="or" data-text="or"></div>
-					<button class="ui positive button" onmousedown="control_window($(this).data('window_id'), 'shutter', 'up');" onmouseup="control_window($(this).data('window_id'), 'shutter', 'stop');">Open</button>
+					<button class="ui positive button" onpointerdown="control_window($(this).data('window_id'), 'shutter', 'up');" onpointerup="control_window($(this).data('window_id'), 'shutter', 'stop');">Open</button>
 				</div>
 				<button class="ui red button" onclick="control_window($(this).data('window_id'), 'shutter', 'stop');">Stop</button>
 			</div>
