@@ -2,7 +2,7 @@
 <!--
 HomeMatic addon to control velux windows and shutters
 
-Copyright (C) 2017  Jan Schneider <oss@janschneider.net>
+Copyright (C) 2020  Jan Schneider <oss@janschneider.net>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,9 +22,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 	<meta charset="UTF-8">
 	<meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js" integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8=" crossorigin="anonymous"></script>
-	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.2.7/semantic.min.css" integrity="sha256-wT6CFc7EKRuf7uyVfi+MQNHUzojuHN2pSw0YWFt2K5E=" crossorigin="anonymous" />
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.2.7/semantic.min.js" integrity="sha256-flVaeawsBV96vCHiLmXn03IRJym7+ZfcLVvUWONCas8=" crossorigin="anonymous"></script>
+	<script src="js/jquery-3.3.1.min.js"></script>
+	<script src="js/semantic-2.4.2.min.js"></script>
+	<link rel="stylesheet" href="css/semantic-2.4.2.min.css" />
 	<style>
 	</style>
 	
@@ -34,20 +34,30 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 		var channels = {};
 		var config_loaded = false;
 		var message_timer_id = null;
+		var sid = null;
 		
-		$(document).ready(function() {
-			get_config();
-			get_channels();
-		});
+		function get_url_vars() {
+			var vars = {};
+			var params = window.location.search.substring(1).split('&');
+			for(var i=0; i<params.length; i++) {
+				param = params[i].split('=');
+				if (param.length > 1) {
+					vars[param[0]] = param[1];
+				}
+			}
+			return vars;
+		}
 		
-		function display_message(type, html, millis) {
+		function get_url_var(name) {
+			return get_url_vars()[name];
+		}
+		
+		function display_message(type, text, millis) {
 			clear_message();
-			$('#message').html(html);
-			$('#message').attr('class', 'ui ' + type + ' message visible');
-			$('#message-edit-window').html(html);
-			$('#message-edit-window').attr('class', 'ui ' + type + ' message visible');
+			$('#message').html(text);
+			$('#message-container').attr('class', 'ui ' + type + ' message visible');
 			message_timer_id = setTimeout(clear_message, millis);
-		};
+		}
 		
 		function clear_message() {
 			if (message_timer_id != null) {
@@ -55,35 +65,48 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 			}
 			message_timer_id = null;
 			$('#message').html('');
-			$('#message').attr('class', 'ui message hidden');
-			$('#message-edit-window').html('');
-			$('#message-edit-window').attr('class', 'ui message hidden');
+			$('#message-container').attr('class', 'ui message hidden');
 		}
 		
-		function rest(method, path, data, success_callback, error_callback) {
+		function default_error_callback(xhr, ajaxOptions, thrownError) {
+			console.error(xhr);
+			err = thrownError;
+			try {
+				obj = JSON.parse(xhr.responseText);
+				if (obj.error != null) {
+					err = obj.error;
+				}
+			}
+			catch(e) {
+			}
+			display_message('error', 'An error occurred: ' + err, 10000);
+		}
+		
+		function rest(method, path, data, success_callback, error_callback, async=true) {
 			if (!error_callback) {
-				error_callback = function(xhr, ajaxOptions, thrownError) {
-					console.error(xhr);
-					err = thrownError;
-					try {
-						obj = JSON.parse(xhr.responseText);
-						if (obj.error != null) {
-							err = obj.error;
-						}
-					}
-					catch(e) {
-					}
-					display_message('error', 'An error occurred: ' + err, 60000);
+				error_callback = default_error_callback;
+			}
+			if (data != null) {
+				data = JSON.stringify(data);
+			}
+			var result = null;
+			if (!async) {
+				success_callback = function(data) {
+					result = data;
 				}
 			}
 			$.ajax({
-				url: "rest.cgi?" + path,
+				url: "rest.cgi?sid=" + sid + "&path=" + path,
 				type: method,
+				async: async,
 				data: data,
 				context: document.body,
 				success: success_callback,
 				error: error_callback
 			});
+			if (!async) {
+				return result;
+			}
 		}
 		
 		function get_window_id() {
@@ -98,6 +121,24 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 				}
 			});
 			return id;
+		}
+		
+		function open_window_control(window_id) {
+			var shutter = false;
+			config.windows.forEach(function(window) {
+				if (window_id == parseInt(window.id)) {
+					//console.log(window);
+					shutter = (window.shutter_down_channel && window.shutter_up_channel);
+					$('#modal-window-title').text("Control window: " + window.name);
+				}
+			});
+			$('#shutter-control-title').css('display', shutter ? '' : 'none');
+			$('#shutter-control-fields').css('display', shutter ? '' : 'none');
+			$('#dimmer-window-control').removeClass('active');
+			$('#form-window-control').form('clear');
+			$('#modal-window-control').modal('show');
+			
+			$('#modal-window-control').find('button').data('window_id', window_id);
 		}
 		
 		function update_view() {
@@ -116,10 +157,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 						}
 					}).modal('show').attr('data-id', window.id);
 				});
+				var bcontrol = $('<button class="ui blue basic button">').attr('data-id', window.id).text('control');
+				bcontrol.click(function() {
+					open_window_control(this.getAttribute('data-id'));
+				});
 				$("#windows tbody").append($('<tr>').append(
 					$('<td>').text(window.id),
 					$('<td>').text(window.name || ''),
-					$('<td class="center aligned">').append(bedit, bdel)
+					$('<td class="center aligned">').append(bedit, bdel, bcontrol)
 				));
 			});
 			
@@ -152,7 +197,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 		}
 		
 		function update_global_config(config) {
-			rest("PUT", "/config/global", JSON.stringify(config), function(data) {
+			rest("PUT", "/config/global", config, function(data) {
 				get_config();
 				display_message('success', 'Config successfully updated', 5000);
 			});
@@ -177,11 +222,22 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 		}
 		
 		function update_config_window(window) {
-			rest("PUT", "/config/window/" + window.id, JSON.stringify(window), function(data) {
+			rest("PUT", "/config/window/" + window.id, window, function(data) {
 				get_config();
 				display_message('success', 'Window successfully updated', 5000);
 			});
 		}
+		
+		function control_window(window_id, object, command) {
+			//console.log(window_id + " - " + object + " - " + command);
+			rest("POST", "/send_command", {"window_id": window_id, "object": object, "command": command},
+				function(data) {
+				},
+				function(xhr, ajaxOptions, thrownError) {
+				}
+			);
+		}
+		
 		
 		function edit_config_window(id) {
 			var window_channel = $("select[name='window_channel']");
@@ -270,7 +326,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 			win.focus();
 		}
 		
-		$(document).ready(function() {
+		function init() {
+			$('#content').dimmer('hide');
+			get_config();
+			get_channels();
 			rest("GET", "/version", null, function(version) {
 				document.title = document.title + " " + version;
 			});
@@ -396,57 +455,112 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 					clear_message();
 				}
 			});
+		}
+		
+		$(document).ready(function() {
+			$('#content').dimmer('show');
+			sid = get_url_var('sid');
+			rest("GET", "/get_session", null,
+				function(data) {
+					init();
+				},
+				function(xhr, ajaxOptions, thrownError) {
+					if (xhr.status == 401) {
+						var form_config = {
+							on: 'blur',
+							fields: {
+								username: {
+									identifier: 'username'
+								},
+								password: {
+									identifier: 'password'
+								}
+							},
+							onSuccess: function(event, fields) {
+								event.preventDefault();
+								var username = $(event.currentTarget).form('get value', 'username');
+								var password = $(event.currentTarget).form('get value', 'password');
+								rest("POST", "/login", {"username": username, "password": password},
+									function(data) {
+										window.location.href = window.location.href.replace(/\?.*/, '') + '?sid=@' + data + '@';
+									},
+									function(xhr, ajaxOptions, thrownError) {
+										default_error_callback(xhr, ajaxOptions, thrownError);
+									}
+								);
+							}
+						};
+						$('#form-login').form(form_config);
+						$('#modal-login').modal('show');
+					}
+					else {
+						default_error_callback(xhr, ajaxOptions, thrownError);
+					}
+				}
+			);
 		});
 	</script>
 </head>
 <body>
-	<div style="padding-top: 5vw" class="ui container">
-		<h1 class="ui header">Velux Configuration</h1>
-		<div id="message" class="ui message hidden">
+	<div style="position: fixed; left: 50%; top: 2vh; z-index: 2000">
+		<div style="position: relative; left: -50%;">
+			<div class="ui container">
+				<div id="message-container" class="ui message hidden" style="margin-left: 100px; margin-right: 100px; min-height: 50px; min-width: 340px">
+					<i class="close icon" onclick="clear_message();"></i>
+					<div id="message"></div>
+				</div>
+			</div>
 		</div>
+	</div>
+	
+	<div id="content" style="padding: 0; margin: 0; width: 100%">
+		<div style="padding-top: 5vw" class="ui container">
 		
-		<h2 class="ui dividing header">Global Config</h2>
-		<form id="form-global-config" class="ui form">
-			<div class="field">
-				<label>Button short press time in milliseconds</label>
-				<input name="short_press_millis" placeholder="" type="text">
+			<h1 class="ui header">Velux Configuration</h1>
+			
+			<h2 class="ui dividing header">Global Config</h2>
+			<form id="form-global-config" class="ui form">
+				<div class="field">
+					<label>Button short press time in milliseconds</label>
+					<input name="short_press_millis" placeholder="" type="text">
+				</div>
+				<div class="field">
+					<label>Button long press time in milliseconds</label>
+					<input name="long_press_millis" placeholder="" type="text">
+				</div>
+				<div class="field">
+					<label>Command pause time in milliseconds</label>
+					<input name="command_pause_millis" placeholder="" type="text">
+				</div>
+				<div class="field">
+					<label>Log level (nothing=0, error=1, warning=2, info=3, debug=4)</label>
+					<input name="log_level" placeholder="" type="text">
+				</div>
+				<div id="submit-global-config" class="ui primary submit button">Submit</div>
+			</form>
+			
+			<h2 class="ui dividing header">Configured Velux Windows</h2>
+			<table id="windows" class="ui celled stackable table">
+				<thead>
+					<tr>
+						<th>ID</th>
+						<th>Name</th>
+						<th class="center aligned">Action</th>
+					</tr>
+				</thead>
+				<tbody>
+				</tbody>
+			</table>
+			<div onclick="add_window();" class="ui blue basic button">
+			<i class="plus icon"></i>
+			Add Velux Window
 			</div>
-			<div class="field">
-				<label>Button long press time in milliseconds</label>
-				<input name="long_press_millis" placeholder="" type="text">
-			</div>
-			<div class="field">
-				<label>Command pause time in milliseconds</label>
-				<input name="command_pause_millis" placeholder="" type="text">
-			</div>
-			<div class="field">
-				<label>Log level (nothing=0, error=1, warning=2, info=3, debug=4)</label>
-				<input name="log_level" placeholder="" type="text">
-			</div>
-			<div id="submit-global-config" class="ui primary submit button">Submit</div>
-		</form>
-		
-		<h2 class="ui dividing header">Configured Velux Windows</h2>
-		<table id="windows" class="ui celled stackable table">
-			<thead>
-				<tr>
-					<th>ID</th>
-					<th>Name</th>
-					<th class="center aligned">Action</th>
-				</tr>
-			</thead>
-			<tbody>
-			</tbody>
-		</table>
-		<div onclick="add_window();" class="ui blue basic button">
-		<i class="plus icon"></i>
-		Add Velux Window
-		</div>
-		<div class="ui right aligned grid">
-			<div class="right floated right aligned twelve wide column">
-				<div onclick="show_log();" class="ui blue basic button">
-				<i class="file text outline icon"></i>
-				Show addon log
+			<div class="ui right aligned grid">
+				<div class="right floated right aligned twelve wide column">
+					<div onclick="show_log();" class="ui blue basic button">
+					<i class="file text outline icon"></i>
+					Show addon log
+					</div>
 				</div>
 			</div>
 		</div>
@@ -541,5 +655,56 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 		</div>
 	</div>
 	
+	<div id="modal-window-control" class="ui modal">
+		<i class="close icon"></i>
+		<div id="dimmer-window-control" class="ui inverted dimmer">
+			<div class="ui text loader">Loading</div>
+		</div>
+		<div class="header" id="modal-window-title">Control window</div>
+		<div class="content">
+			<form id="form-window-control" class="ui form">
+			</form>
+				
+			<h3 class="ui dividing header">Window</h3>
+			<div class="fields">
+				<div class="ui buttons">
+					<button class="ui button" onmousedown="control_window($(this).data('window_id'), 'window', 'down');" onmouseup="control_window($(this).data('window_id'), 'window', 'stop');">Close</button>
+					<div class="or" data-text="or"></div>
+					<button class="ui positive button" onmousedown="control_window($(this).data('window_id'), 'window', 'up');" onmouseup="control_window($(this).data('window_id'), 'window', 'stop');">Open</button>
+				</div>
+				<button class="ui red button" onclick="control_window($(this).data('window_id'), 'window', 'stop');">Stop</button>
+			</div>
+			
+			<h3 class="ui dividing header" id="shutter-control-title">Shutter</h3>
+			<div class="fields" id="shutter-control-fields">
+				<div class="ui buttons">
+					<button class="ui button" onmousedown="control_window($(this).data('window_id'), 'shutter', 'down');" onmouseup="control_window($(this).data('window_id'), 'shutter', 'stop');">Close</button>
+					<div class="or" data-text="or"></div>
+					<button class="ui positive button" onmousedown="control_window($(this).data('window_id'), 'shutter', 'up');" onmouseup="control_window($(this).data('window_id'), 'shutter', 'stop');">Open</button>
+				</div>
+				<button class="ui red button" onclick="control_window($(this).data('window_id'), 'shutter', 'stop');">Stop</button>
+			</div>
+		</div>
+	</div>
+	
+	<div id="modal-login" class="ui modal">
+		<i class="close icon"></i>
+		<div class="header">Login</div>
+		<div class="content">
+			<form id="form-login" class="ui form">
+				<div class="field">
+					<label>Username</label>
+					<input type="text" name="username" value="Admin">
+				</div>
+				<div class="field">
+					<label>Password</label>
+					<input type="password" name="password">
+				</div>
+				<div class="ui error message"></div>
+				<div id="submit-login" class="ui primary submit button">Login</div>
+			</form>
+		</div>
+	</div>
+
 </body>
 </html>
